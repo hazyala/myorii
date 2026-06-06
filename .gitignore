@@ -18,6 +18,7 @@ venv/
 build/
 dist/
 *.spec
+!packaging/**/*.spec
 
 # macOS
 .DS_Store
