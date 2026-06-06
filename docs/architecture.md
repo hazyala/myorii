@@ -1,0 +1,293 @@
+# 🏗️ Myorii Architecture
+
+## 개요
+
+Myorii는 macOS 메뉴바 및 Windows 시스템 트레이에 상주하는 로컬 LLM 기반 데스크톱 컴패니언 애플리케이션이다.
+
+비즈니스 로직은 플랫폼에 독립적으로 설계하고, 운영체제별 기능만 별도로 분리하여 관리한다.
+
+---
+
+# 전체 구조
+
+```text
+┌─────────────────────┐
+│      Menu Bar       │
+│     System Tray     │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│        UI           │
+│      (PyQt6)        │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│       Core          │
+├─────────────────────┤
+│ LLM Client          │
+│ Naming Engine       │
+│ Image Analyzer      │
+│ Clipboard Manager   │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│      Storage        │
+├─────────────────────┤
+│ SQLite              │
+│ Local Settings      │
+│ Session History     │
+└─────────────────────┘
+```
+
+---
+
+# 계층 구조
+
+## Platform Layer
+
+운영체제 의존 기능을 담당한다.
+
+### 역할
+
+* 메뉴바 아이콘 생성
+* 시스템 트레이 생성
+* 창 위치 계산
+* OS 이벤트 처리
+
+### 구성
+
+```text
+platform/
+├── macos/
+└── windows/
+```
+
+---
+
+## UI Layer
+
+사용자가 직접 보는 화면을 담당한다.
+
+### 역할
+
+* 채팅 화면
+* 메모 화면
+* 설정 화면
+* 이미지 미리보기
+
+### 구성
+
+```text
+ui/
+├── main_window.py
+├── widgets/
+│   ├── chat_view.py
+│   ├── memo_view.py
+│   └── settings_view.py
+└── styles/
+```
+
+---
+
+## Core Layer
+
+Myorii의 핵심 비즈니스 로직을 담당한다.
+
+### 역할
+
+* Ollama 호출
+* 네이밍 추천
+* 이미지 분석
+* 응답 생성
+* 클립보드 복사
+
+### 구성
+
+```text
+core/
+├── llm_client.py
+├── naming.py
+├── image_analyzer.py
+└── clipboard.py
+```
+
+---
+
+## Storage Layer
+
+로컬 데이터 저장을 담당한다.
+
+### 역할
+
+* 메모 저장
+* 설정 저장
+* 세션 저장
+
+### 구성
+
+```text
+storage/
+├── database.py
+├── memo_repository.py
+└── settings_repository.py
+```
+
+---
+
+# MVP 기능 흐름
+
+## 네이밍
+
+```text
+사용자 입력
+
+↓
+
+Chat View
+
+↓
+
+Naming Engine
+
+↓
+
+LLM Client
+
+↓
+
+Ollama
+
+↓
+
+응답 반환
+```
+
+---
+
+## 이미지 분석
+
+```text
+이미지 붙여넣기
+
+↓
+
+Chat View
+
+↓
+
+Image Analyzer
+
+↓
+
+LLM Client
+
+↓
+
+qwen3-vl
+
+↓
+
+분석 결과 반환
+```
+
+---
+
+## 메모
+
+```text
+사용자 입력
+
+↓
+
+Memo View
+
+↓
+
+Memo Repository
+
+↓
+
+SQLite 저장
+```
+
+---
+
+# 플랫폼 분기
+
+플랫폼별 구현은 Platform Layer에서만 처리한다.
+
+```python
+import platform
+
+if platform.system() == "Darwin":
+    from platform.macos.menubar import MacTray
+
+elif platform.system() == "Windows":
+    from platform.windows.tray import WindowsTray
+```
+
+Core, UI, Storage는 플랫폼에 의존하지 않는다.
+
+---
+
+# 향후 확장 계획
+
+## V2
+
+Notion 연동
+
+```text
+integrations/
+└── notion/
+```
+
+---
+
+## V3
+
+클라우드 동기화
+
+```text
+sync/
+├── api_client.py
+└── sync_manager.py
+```
+
+---
+
+## V4
+
+Windows 배포
+
+기존 Core / UI 재사용
+
+Platform Layer만 추가 구현
+
+---
+
+# 설계 원칙
+
+## 1. 플랫폼 독립성
+
+비즈니스 로직은 운영체제에 의존하지 않는다.
+
+---
+
+## 2. 로컬 우선
+
+채팅, 네이밍, 메모는 인터넷 없이 동작한다.
+
+---
+
+## 3. 경량성
+
+항상 백그라운드에 상주하므로 최소 리소스를 사용한다.
+
+---
+
+## 4. 단순성
+
+과도한 추상화보다 유지보수가 쉬운 구조를 우선한다.
