@@ -2,18 +2,28 @@
 
 from __future__ import annotations
 
-import platform
+import sys
+
+from PyQt6.QtWidgets import QApplication
+
+from platform.macos.menubar import MacMenuBar
+from ui.main_window import MainWindow
 
 
-def main() -> None:
-    if platform.system() == "Darwin":
-        from platform.macos.menubar import run_menubar_app
+def main() -> int:
+    app = QApplication(sys.argv)
+    app.setApplicationName("Myorii")
+    app.setQuitOnLastWindowClosed(False)
 
-        run_menubar_app()
-        return
+    window = MainWindow()
+    menu_bar = MacMenuBar(window)
+    menu_bar.show()
 
-    raise RuntimeError(f"Myorii menu bar is not implemented for {platform.system()}")
+    app.setProperty("myorii_window", window)
+    app.setProperty("myorii_menu_bar", menu_bar)
+
+    return app.exec()
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
