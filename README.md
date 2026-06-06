@@ -248,6 +248,15 @@ ollama pull qwen3-vl:4b
 python main.py
 ```
 
+## macOS 앱 번들 실행
+
+다중 디스플레이 메뉴바 확인은 `LSUIElement`가 적용된 앱 번들로 실행한다.
+
+```bash
+PYINSTALLER_CONFIG_DIR=/tmp/myorii_pyinstaller pyinstaller packaging/macos/Myorii.spec --noconfirm --clean
+open -n dist/Myorii.app
+```
+
 ---
 
 # 🐾 브랜드 컨셉
