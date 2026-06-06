@@ -56,6 +56,7 @@ Myorii는 macOS 메뉴바 및 Windows 시스템 트레이에 상주하는 로컬
 * 시스템 트레이 생성
 * 창 위치 계산
 * OS 이벤트 처리
+* PyInstaller 번들 리소스 경로 처리
 
 ### 구성
 
@@ -220,16 +221,66 @@ SQLite 저장
 플랫폼별 구현은 Platform Layer에서만 처리한다.
 
 ```python
-import platform
+import sys
 
-if platform.system() == "Darwin":
-    from platform.macos.menubar import MacTray
+if sys.platform == "darwin":
+    from platform.macos.menubar import MacMenuBar
 
-elif platform.system() == "Windows":
+elif sys.platform == "win32":
     from platform.windows.tray import WindowsTray
 ```
 
 Core, UI, Storage는 플랫폼에 의존하지 않는다.
+
+---
+
+# 현재 macOS 실행 흐름
+
+```text
+main.py
+
+↓
+
+QApplication 생성
+
+↓
+
+MainWindow 생성
+
+↓
+
+MacMenuBar 생성
+
+↓
+
+메뉴바 아이콘 클릭
+
+↓
+
+MainWindow toggle_at(icon_geometry)
+```
+
+메인 창은 메뉴바 아이콘 위치를 기준으로 표시된다.
+
+창 표시 시 현재 작업 화면을 강제로 활성화하지 않는다.
+
+종료 기능은 추후 설정 화면에서 별도 구현한다.
+
+---
+
+# macOS 패키징
+
+PyInstaller spec 파일은 아래 경로에서 관리한다.
+
+```text
+packaging/macos/Myorii.spec
+```
+
+빌드 명령은 다음과 같다.
+
+```bash
+PYINSTALLER_CONFIG_DIR=/tmp/myorii_pyinstaller pyinstaller packaging/macos/Myorii.spec --noconfirm --clean
+```
 
 ---
 
