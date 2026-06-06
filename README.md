@@ -261,15 +261,10 @@ python main.py
 
 ## macOS 앱 빌드 실행
 
-PyInstaller로 macOS 앱 번들을 생성한다.
+PyInstaller로 macOS 앱 번들을 생성 후 실행한다.
 
 ```bash
 PYINSTALLER_CONFIG_DIR=/tmp/myorii_pyinstaller pyinstaller packaging/macos/Myorii.spec --noconfirm --clean
-```
-
-생성된 앱을 실행한다.
-
-```bash
 open -n dist/Myorii.app
 ```
 
