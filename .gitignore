@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+.venv/
+venv/
+
+# Environment
+.env
+
+# Database
+*.db
+*.sqlite3
+
+# Build
+build/
+dist/
+*.spec
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Logs
+*.log
+
+# PyQt
+*.qrc
