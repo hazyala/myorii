@@ -150,9 +150,7 @@ Myorii 아이콘 사용
 
 ## 목업
 
-```markdown
 ![Chat](../assets/mockups/chat.png)
-```
 
 ---
 
@@ -202,9 +200,7 @@ Myorii 아이콘 사용
 
 ## 목업
 
-```markdown
 ![Memo](../assets/mockups/memo.png)
-```
 
 ---
 
@@ -245,9 +241,7 @@ Myorii 아이콘 사용
 
 ## 목업
 
-```markdown
 ![Todo](../assets/mockups/todo.png)
-```
 
 ---
 
@@ -289,9 +283,7 @@ Notion 할일 관리
 
 ## 목업
 
-```markdown
 ![Settings](../assets/mockups/settings.png)
-```
 
 ---
 
