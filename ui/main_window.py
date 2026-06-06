@@ -20,6 +20,7 @@ class MainWindow(QMainWindow):
             | Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
         )
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
 
         placeholder = QLabel("Myorii")
         placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -40,7 +41,6 @@ class MainWindow(QMainWindow):
         self.move(self._position_for(icon_geometry))
         self.show()
         self.raise_()
-        self.activateWindow()
 
     def _position_for(self, icon_geometry: QRect) -> QPoint:
         screen_geometry = self._screen_geometry(icon_geometry)
