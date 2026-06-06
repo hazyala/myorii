@@ -1,18 +1,23 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-from pathlib import Path
+import os
+import sysconfig
 
 
-project_root = Path(SPECPATH).parents[1]
+project_root = os.path.abspath(os.path.join(SPECPATH, "..", ".."))
 
 a = Analysis(
-    [str(project_root / "main.py")],
-    pathex=[str(project_root)],
+    [os.path.join(project_root, "main.py")],
+    pathex=[project_root],
     binaries=[],
     datas=[
         (
-            str(project_root / "assets" / "mockups" / "myorii.png"),
-            "assets/mockups",
+            os.path.join(project_root, "assets", "icons", "menubar_icon.png"),
+            os.path.join("assets", "icons"),
+        ),
+        (
+            os.path.join(sysconfig.get_path("stdlib"), "platform.py"),
+            "stdlib",
         ),
     ],
     hiddenimports=[],
@@ -23,6 +28,7 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
+
 pyz = PYZ(a.pure)
 
 exe = EXE(
@@ -42,6 +48,7 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
 )
+
 coll = COLLECT(
     exe,
     a.binaries,
@@ -51,11 +58,14 @@ coll = COLLECT(
     upx_exclude=[],
     name="Myorii",
 )
+
 app = BUNDLE(
     coll,
     name="Myorii.app",
-    bundle_identifier="com.myorii.app",
+    icon=None,
+    bundle_identifier="app.myorii.desktop",
     info_plist={
+        "CFBundleDisplayName": "Myorii",
         "LSUIElement": True,
         "NSHighResolutionCapable": True,
     },

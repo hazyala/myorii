@@ -11,7 +11,7 @@ from ui.main_window import MainWindow
 
 
 class MacMenuBar(QObject):
-    ICON_PATH = Path("assets") / "mockups" / "myorii.png"
+    ICON_PATH = Path("assets") / "icons" / "menubar_icon.png"
 
     def __init__(self, window: MainWindow) -> None:
         super().__init__()
