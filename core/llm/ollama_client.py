@@ -1,0 +1,64 @@
+from __future__ import annotations
+
+from collections.abc import Iterator
+from typing import Any
+
+import ollama
+
+
+class OllamaError(RuntimeError):
+    pass
+
+
+class OllamaNotRunning(OllamaError):
+    pass
+
+
+class ModelNotFound(OllamaError):
+    pass
+
+
+class OllamaClient:
+    def __init__(self, host: str | None = None) -> None:
+        self._client = ollama.Client(host=host) if host else ollama.Client()
+
+    def is_available(self) -> bool:
+        try:
+            self._client.list()
+        except Exception:
+            return False
+        return True
+
+    def list_models(self) -> list[str]:
+        try:
+            response = self._client.list()
+        except Exception as exc:
+            raise OllamaNotRunning("Ollama가 실행 중이 아니에요") from exc
+
+        models = self._value(response, "models", [])
+        names: list[str] = []
+        for model in models:
+            name = self._value(model, "model") or self._value(model, "name")
+            if name:
+                names.append(str(name))
+        return names
+
+    def stream_chat(self, model: str, messages: list[dict[str, str]]) -> Iterator[str]:
+        try:
+            stream = self._client.chat(model=model, messages=messages, stream=True)
+            for chunk in stream:
+                content = self._value(self._value(chunk, "message", {}), "content", "")
+                if content:
+                    yield str(content)
+        except ollama.ResponseError as exc:
+            if exc.status_code == 404 or "not found" in str(exc).lower():
+                raise ModelNotFound(f"모델이 설치돼 있지 않아요: {model}") from exc
+            raise OllamaError(str(exc)) from exc
+        except Exception as exc:
+            raise OllamaNotRunning("Ollama가 실행 중이 아니에요") from exc
+
+    @staticmethod
+    def _value(data: Any, key: str, default: Any = None) -> Any:
+        if isinstance(data, dict):
+            return data.get(key, default)
+        return getattr(data, key, default)

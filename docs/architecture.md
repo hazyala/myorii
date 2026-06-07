@@ -86,8 +86,10 @@ platform/
 ```text
 ui/
 ├── main_window.py
+├── chat_worker.py
 ├── widgets/
 │   ├── chat_view.py
+│   ├── message_bubble.py
 │   ├── memo_view.py
 │   └── settings_view.py
 └── styles/
@@ -111,11 +113,15 @@ Myorii의 핵심 비즈니스 로직을 담당한다.
 
 ```text
 core/
-├── llm_client.py
-├── naming.py
-├── image_analyzer.py
-└── clipboard.py
+├── paths.py
+├── llm/
+│   ├── ollama_client.py
+│   ├── chat_service.py
+│   └── prompt_loader.py
+└── tools/
 ```
+
+`core/`는 Qt를 import하지 않는 순수 Python 계층이다. UI는 Ollama를 직접 호출하지 않고 `ChatService`를 통해서만 모델 목록 조회와 채팅 스트리밍을 요청한다.
 
 ---
 
@@ -269,19 +275,24 @@ MainWindow toggle_at(icon_geometry)
 현재 `MainWindow`는 아래 UI 요소를 직접 구성한다.
 
 * 글래스 팝오버 외곽과 상단 포인터
-* Header의 Myorii 캐릭터, 설정 버튼, 앱 이름 옆 온라인/오프라인 상태
+* Header의 Myorii 캐릭터, 설정 버튼, 창 닫기 버튼, 앱 이름 옆 온라인/오프라인 상태
 * 채팅, 할일, 메모 탭과 탭별 컨텐츠 스택
 * 기본 화면과 설정 화면을 전환하는 페이지 스택
-* 채팅 메시지 목록 전용 스크롤 영역
-* 채팅 입력 영역, 첨부파일 액션, 대화 기록 저장 스위치
+* `ChatView` 기반 채팅 메시지 목록 전용 스크롤 영역
+* 사용자/Assistant 메시지 버블과 Assistant Markdown 렌더링
+* 코드블록/인라인 코드/기술 항목 클릭 복사와 `복사됨` 토스트
+* 응답 생성 중 빨간 발바닥 바운스 인디케이터
+* 채팅 기록 버튼, 입력창 내부 `+` 액션, 대화 기록 저장 스위치
 * `Enter` 전송, `Shift+Enter` 줄바꿈을 처리하는 입력 위젯
+* `ChatWorker`를 통한 워커 스레드 기반 토큰 스트리밍
+* `ModelListWorker`를 통한 설정 모델 목록 비동기 로딩
 
-채팅 메시지 렌더링은 Ollama 연동 이후 Core Layer와 연결한다.
+채팅 메시지는 `ChatService`가 현재 세션 히스토리를 보관하고, `OllamaClient`가 `qwen3-vl:4b` 모델에 스트리밍 요청을 보내는 방식으로 렌더링한다. 모델 목록은 시작 시 기본 모델만 먼저 보여준 뒤 워커 스레드에서 설치 모델을 채워 메인 스레드의 Ollama 호출을 피한다. 응답 완료 후에는 파일명, 함수명, 변수명, 명령어처럼 복사 대상이 되는 기술 항목을 별도 코드블록으로 승격해 개별 복사를 지원한다.
 
 설정 화면은 `ui/settings_view.py`에서 별도 구성한다.
 
 * 일반 섹션: 시작 시 열기 스위치, 테마 토글, 언어 토글
-* 로컬 모델 섹션: 기본 모델 드롭다운, 모델 관리 버튼
+* 로컬 모델 섹션: 설치된 Ollama 모델 드롭다운, 모델 관리 버튼
 * 연동 섹션: Notion 연동 버튼
 * 정보 섹션: 임시 버전, 도움말 버튼, 피드백 버튼
 * 앱 종료 버튼: `QApplication.quit`으로 실제 종료
@@ -299,7 +310,7 @@ PyInstaller spec 파일은 아래 경로에서 관리한다.
 packaging/macos/Myorii.spec
 ```
 
-앱 번들에는 메뉴바 아이콘, 탭 아이콘, 설정/전송 아이콘, Myorii 캐릭터 에셋을 포함한다.
+앱 번들에는 메뉴바 아이콘, 탭 아이콘, 설정/전송 아이콘, Myorii 캐릭터 에셋, `prompts/`, `core/tools/`를 포함한다.
 
 빌드 명령은 다음과 같다.
 
