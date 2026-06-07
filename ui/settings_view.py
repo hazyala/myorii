@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from core.llm.chat_service import DEFAULT_MODEL
 from ui.assets import asset_path, tinted_icon
 from ui.widgets.switch_button import SwitchButton
 
@@ -117,10 +118,12 @@ class SettingsRow(QFrame):
 
 class SettingsView(QWidget):
     back_requested = pyqtSignal()
+    model_changed = pyqtSignal(str)
 
-    def __init__(self) -> None:
+    def __init__(self, models: list[str] | None = None) -> None:
         super().__init__()
         self.setObjectName("settingsPanel")
+        self._models = models or [DEFAULT_MODEL]
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -213,6 +216,9 @@ class SettingsView(QWidget):
         combo.setObjectName("modelComboBox")
         combo.setFixedHeight(34)
         combo.setMinimumWidth(190)
+        combo.addItems(self._available_models())
+        combo.setCurrentText(DEFAULT_MODEL)
+        combo.currentTextChanged.connect(self.model_changed.emit)
         model.add_control(combo)
         section.add_row(model)
 
@@ -267,3 +273,6 @@ class SettingsView(QWidget):
         exit_button.setCursor(Qt.CursorShape.PointingHandCursor)
         exit_button.clicked.connect(QApplication.quit)
         return exit_button
+
+    def _available_models(self) -> list[str]:
+        return self._models

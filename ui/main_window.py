@@ -8,12 +8,10 @@ from PyQt6.QtGui import (
     QColor,
     QGuiApplication,
     QIcon,
-    QKeyEvent,
     QPainter,
     QPainterPath,
     QPixmap,
     QPolygonF,
-    QTextOption,
 )
 from PyQt6.QtWidgets import (
     QFrame,
@@ -23,18 +21,17 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QPushButton,
     QButtonGroup,
-    QScrollArea,
     QSizePolicy,
     QSpacerItem,
     QStackedWidget,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
+from core.llm.chat_service import ChatService
 from ui.assets import asset_path, tinted_icon
 from ui.settings_view import SettingsView
-from ui.widgets.switch_button import SwitchButton
+from ui.widgets.chat_view import ChatView
 
 
 class InternetStatusWatcher(QObject):
@@ -141,51 +138,6 @@ class TabButton(QPushButton):
         self.setIcon(tinted_icon(self._icon_name, color, QSize(16, 16)))
 
 
-class ChatInput(QTextEdit):
-    send_requested = pyqtSignal(str)
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.setObjectName("promptInput")
-        self.setPlaceholderText("무엇을 도와줄까?")
-        self.setAcceptRichText(False)
-        self.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
-        self.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.setContentsMargins(0, 0, 0, 0)
-        self.document().setDocumentMargin(2)
-        self.setFixedHeight(32)
-        self.textChanged.connect(self._fit_height_to_document)
-
-    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
-        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
-                super().keyPressEvent(event)
-                return
-
-            self._request_send()
-            return
-
-        super().keyPressEvent(event)
-
-    def request_send(self) -> None:
-        self._request_send()
-
-    def _request_send(self) -> None:
-        text = self.toPlainText().strip()
-        if not text:
-            return
-
-        self.send_requested.emit(text)
-        self.clear()
-
-    def _fit_height_to_document(self) -> None:
-        line_count = max(1, self.toPlainText().count("\n") + 1)
-        next_height = 32 + ((line_count - 1) * 18)
-        self.setFixedHeight(min(next_height, 78))
-
-
 class MainWindow(QMainWindow):
     DEFAULT_SIZE = QSize(430, 610)
     EDGE_MARGIN = 12
@@ -198,6 +150,7 @@ class MainWindow(QMainWindow):
         self.setFixedSize(self.DEFAULT_SIZE)
         self._tabs_group = QButtonGroup(self)
         self._tabs_group.setExclusive(True)
+        self._chat_service = ChatService()
         self._page_stack = QStackedWidget()
         self._content_stack = QStackedWidget()
         self._status_dot = QLabel()
@@ -246,13 +199,15 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self._tabs())
         main_layout.addWidget(self._content_stack, 1)
 
+        self._chat_view = ChatView(self._chat_service)
         self._content_stack.addWidget(self._content_panel("chatPanel"))
         self._content_stack.addWidget(self._content_panel("todoPanel"))
         self._content_stack.addWidget(self._content_panel("memoPanel"))
         self._content_stack.setCurrentIndex(0)
 
-        self._settings_view = SettingsView()
+        self._settings_view = SettingsView(self._chat_service.available_models())
         self._settings_view.back_requested.connect(self._show_main_view)
+        self._settings_view.model_changed.connect(self._chat_view.set_model)
         self._page_stack.addWidget(main_page)
         self._page_stack.addWidget(self._settings_view)
         self._page_stack.setCurrentWidget(main_page)
@@ -347,79 +302,9 @@ class MainWindow(QMainWindow):
         layout.setSpacing(0)
 
         if object_name == "chatPanel":
-            layout.addWidget(self._chat_scroll_area(), 1)
-            layout.addWidget(self._input_panel())
+            layout.addWidget(self._chat_view, 1)
         else:
             layout.addStretch(1)
-
-        return frame
-
-    def _chat_scroll_area(self) -> QWidget:
-        scroll_area = QScrollArea()
-        scroll_area.setObjectName("chatScrollArea")
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-
-        content = QWidget()
-        content.setObjectName("chatScrollContent")
-        content_layout = QVBoxLayout(content)
-        content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(10)
-        content_layout.addStretch(1)
-
-        scroll_area.setWidget(content)
-        return scroll_area
-
-    def _input_panel(self) -> QWidget:
-        frame = QFrame()
-        frame.setObjectName("inputPanel")
-        layout = QVBoxLayout(frame)
-        layout.setContentsMargins(10, 8, 10, 8)
-        layout.setSpacing(8)
-
-        input_actions = QHBoxLayout()
-        input_actions.setSpacing(7)
-
-        attachment_button = QPushButton("+")
-        attachment_button.setObjectName("attachmentButton")
-        attachment_button.setFixedSize(22, 22)
-        attachment_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        attachment_label = QLabel("첨부파일")
-        attachment_label.setObjectName("attachmentLabel")
-
-        history_label = QLabel("대화 기록 저장")
-        history_label.setObjectName("historyLabel")
-        toggle = SwitchButton()
-        toggle.setObjectName("historySwitch")
-
-        input_actions.addWidget(attachment_button)
-        input_actions.addWidget(attachment_label)
-        input_actions.addStretch(1)
-        input_actions.addWidget(history_label)
-        input_actions.addWidget(toggle)
-
-        prompt_wrap = QFrame()
-        prompt_wrap.setObjectName("promptWrap")
-        prompt_layout = QHBoxLayout(prompt_wrap)
-        prompt_layout.setContentsMargins(13, 7, 8, 7)
-        prompt_layout.setSpacing(7)
-
-        prompt = ChatInput()
-        send = QPushButton()
-        send.setObjectName("sendButton")
-        send.setIcon(QIcon(str(asset_path("icons", "send.png"))))
-        send.setIconSize(QSize(19, 19))
-        send.setFixedSize(38, 38)
-        send.setCursor(Qt.CursorShape.PointingHandCursor)
-        send.clicked.connect(prompt.request_send)
-
-        prompt_layout.addWidget(prompt, 1, Qt.AlignmentFlag.AlignVCenter)
-        prompt_layout.addWidget(send, 0, Qt.AlignmentFlag.AlignBottom)
-
-        layout.addLayout(input_actions)
-        layout.addWidget(prompt_wrap)
 
         return frame
 
@@ -565,6 +450,41 @@ TabButton:hover {
 #chatScrollArea QWidget,
 #chatScrollContent {
     background: transparent;
+}
+
+#userMessageRow,
+#assistantMessageRow {
+    background: transparent;
+}
+
+#userMessageBubble {
+    background: #2f80ff;
+    border-radius: 14px;
+}
+
+#assistantMessageBubble {
+    background: #ffffff;
+    border: 1px solid rgba(222, 227, 235, 170);
+    border-radius: 14px;
+}
+
+#userMessageBody,
+#assistantMessageBody {
+    background: transparent;
+    border: none;
+    font-size: 13px;
+}
+
+#userMessageBody {
+    color: #ffffff;
+}
+
+#assistantMessageBody {
+    color: #222833;
+}
+
+#assistantAvatar {
+    border-radius: 14px;
 }
 
 QScrollBar:vertical {
