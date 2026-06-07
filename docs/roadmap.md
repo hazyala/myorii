@@ -22,17 +22,18 @@ Myorii는 메뉴바 및 시스템 트레이에 상주하며,
 
 ## 현재 진행 상황
 
-* macOS 메뉴바 진입점 작업 시작
-* `rumps` 기반 메뉴바 앱 골격 추가
+* PyQt6 기반 macOS 메뉴바 진입점 구현
 * `assets/icons/menubar_icon.png`를 메뉴바 아이콘으로 연결
-* 최신 macOS에서 rumps StatusItem이 보이도록 `NSStatusBarButton` 렌더링 보정 추가
-* rumps 래퍼 표시 문제를 우회하기 위해 AppKit `NSStatusBar` 직접 생성 방식으로 전환
-* 메뉴바 텍스트 제거 및 상태바 아이콘 크기 조정
-* 다중 디스플레이 메뉴바 노출을 위해 `LSUIElement`가 적용된 PyInstaller `.app` 번들 설정 추가
+* 메뉴바 아이콘 클릭 시 메인 창 열기/닫기 토글
+* 메뉴바 아이콘 위치를 기준으로 글래스 팝오버 창 표시
+* 현재 작업 화면을 강제로 전환하지 않는 창 표시 방식 적용
+* 채팅, 할일, 메모 탭과 탭별 컨텐츠 영역 전환 구현
+* Ollama 연동 전 채팅 내용 영역은 비워 두고 입력 영역만 배치
+* 인터넷 연결 상태에 따른 온라인/오프라인 Header 표시 구현
+* 대화 기록 저장 스위치 UI 구현
 * PyInstaller frozen 실행에서 로컬 `platform/` 패키지와 표준 라이브러리 `platform.py` 충돌 보정
-* Python 3.12 가상환경에서 `rumps`와 PyObjC 의존성 설치 확인
-* 메뉴 항목은 초기 상태로 `Open Myorii`와 `Quit Myorii` 제공
-* 다음 작업: `Open Myorii` 메뉴 항목과 PyQt6 메인 창 연결
+* `LSUIElement`가 적용된 PyInstaller `.app` 번들 설정 추가
+* 다음 작업: Ollama 연동 및 실제 채팅 메시지 렌더링
 
 ---
 
