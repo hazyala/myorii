@@ -12,8 +12,12 @@ a = Analysis(
     binaries=[],
     datas=[
         (
-            os.path.join(project_root, "assets", "icons", "menubar_icon.png"),
+            os.path.join(project_root, "assets", "icons"),
             os.path.join("assets", "icons"),
+        ),
+        (
+            os.path.join(project_root, "assets", "characters"),
+            os.path.join("assets", "characters"),
         ),
         (
             os.path.join(sysconfig.get_path("stdlib"), "platform.py"),
