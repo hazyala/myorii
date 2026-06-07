@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import sys
+import socket
+import threading
 from pathlib import Path
 
-from PyQt6.QtCore import QPoint, QPointF, QRect, QRectF, QSize, Qt
+from PyQt6.QtCore import QObject, QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QColor,
     QGuiApplication,
@@ -21,8 +23,10 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QPushButton,
+    QButtonGroup,
     QSizePolicy,
     QSpacerItem,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -34,6 +38,62 @@ ASSET_ROOT = Path("assets")
 def asset_path(*parts: str) -> Path:
     app_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
     return app_root / ASSET_ROOT.joinpath(*parts)
+
+
+def tinted_icon(icon_name: str, color: QColor, size: QSize = QSize(20, 20)) -> QIcon:
+    pixmap = QPixmap(str(asset_path("icons", icon_name))).scaled(
+        size,
+        Qt.AspectRatioMode.KeepAspectRatio,
+        Qt.TransformationMode.SmoothTransformation,
+    )
+    if pixmap.isNull():
+        return QIcon(str(asset_path("icons", icon_name)))
+
+    tinted = QPixmap(pixmap.size())
+    tinted.fill(Qt.GlobalColor.transparent)
+
+    painter = QPainter(tinted)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.drawPixmap(0, 0, pixmap)
+    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+    painter.fillRect(tinted.rect(), color)
+    painter.end()
+
+    return QIcon(tinted)
+
+
+class InternetStatusWatcher(QObject):
+    status_changed = pyqtSignal(bool)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._checking = False
+        self._timer = QTimer(self)
+        self._timer.setInterval(5000)
+        self._timer.timeout.connect(self.check_now)
+        self.check_now()
+        self._timer.start()
+
+    def check_now(self) -> None:
+        if self._checking:
+            return
+
+        self._checking = True
+        thread = threading.Thread(target=self._check_connection, daemon=True)
+        thread.start()
+
+    def _check_connection(self) -> None:
+        online = False
+        for endpoint in (("1.1.1.1", 53), ("8.8.8.8", 53), ("www.apple.com", 443)):
+            try:
+                with socket.create_connection(endpoint, timeout=1):
+                    online = True
+                    break
+            except OSError:
+                continue
+
+        self._checking = False
+        self.status_changed.emit(online)
 
 
 class PopoverSurface(QWidget):
@@ -83,13 +143,52 @@ class PopoverSurface(QWidget):
 class TabButton(QPushButton):
     def __init__(self, label: str, icon_name: str, active: bool = False) -> None:
         super().__init__(label)
+        self._icon_name = icon_name
         self.setCheckable(True)
         self.setChecked(active)
-        self.setIcon(QIcon(str(asset_path("icons", icon_name))))
         self.setIconSize(QSize(18, 18))
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setMinimumHeight(48)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.toggled.connect(lambda _checked: self._refresh_icon())
+        self._refresh_icon()
+
+    def enterEvent(self, event) -> None:  # noqa: N802
+        super().enterEvent(event)
+        self._refresh_icon(hovered=True)
+
+    def leaveEvent(self, event) -> None:  # noqa: N802
+        super().leaveEvent(event)
+        self._refresh_icon()
+
+    def _refresh_icon(self, hovered: bool = False) -> None:
+        color = QColor("#2f80ff") if self.isChecked() or hovered else QColor("#555c68")
+        self.setIcon(tinted_icon(self._icon_name, color, QSize(18, 18)))
+
+
+class SwitchButton(QPushButton):
+    def __init__(self) -> None:
+        super().__init__()
+        self.setCheckable(True)
+        self.setFixedSize(42, 24)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setText("")
+        self.toggled.connect(self.update)
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        del event
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        track_color = QColor("#2f80ff") if self.isChecked() else QColor("#dedfe4")
+        knob_x = self.width() - 21 if self.isChecked() else 3
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(track_color)
+        painter.drawRoundedRect(QRectF(0.5, 0.5, self.width() - 1, self.height() - 1), 12, 12)
+        painter.setBrush(QColor("#ffffff"))
+        painter.drawEllipse(QRectF(knob_x, 3, 18, 18))
 
 
 class MainWindow(QMainWindow):
@@ -102,6 +201,13 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("Myorii")
         self.setFixedSize(self.DEFAULT_SIZE)
+        self._tabs_group = QButtonGroup(self)
+        self._tabs_group.setExclusive(True)
+        self._content_stack = QStackedWidget()
+        self._status_dot = QLabel()
+        self._status_text = QLabel("오프라인")
+        self._internet_status = InternetStatusWatcher()
+        self._internet_status.status_changed.connect(self._set_online_status)
         self.setWindowFlags(
             Qt.WindowType.Tool
             | Qt.WindowType.FramelessWindowHint
@@ -130,23 +236,28 @@ class MainWindow(QMainWindow):
         root.setGraphicsEffect(shadow)
 
         layout = QVBoxLayout(root)
-        layout.setContentsMargins(20, 44, 20, 20)
+        layout.setContentsMargins(14, 34, 14, 14)
         layout.setSpacing(0)
 
         layout.addLayout(self._header())
-        layout.addSpacing(20)
+        layout.addSpacing(12)
         layout.addWidget(self._tabs())
-        layout.addWidget(self._chat_panel(), 1)
+        layout.addWidget(self._content_stack, 1)
+
+        self._content_stack.addWidget(self._content_panel("chatPanel"))
+        self._content_stack.addWidget(self._content_panel("todoPanel"))
+        self._content_stack.addWidget(self._content_panel("memoPanel"))
+        self._content_stack.setCurrentIndex(0)
 
         return root
 
     def _header(self) -> QHBoxLayout:
         layout = QHBoxLayout()
-        layout.setContentsMargins(22, 0, 8, 0)
-        layout.setSpacing(12)
+        layout.setContentsMargins(18, 0, 8, 0)
+        layout.setSpacing(10)
 
         avatar = QLabel()
-        avatar.setFixedSize(68, 68)
+        avatar.setFixedSize(52, 52)
         avatar.setPixmap(
             QPixmap(str(asset_path("characters", "myorii_profile.png"))).scaled(
                 avatar.size(),
@@ -157,21 +268,20 @@ class MainWindow(QMainWindow):
 
         title = QLabel("Myorii")
         title.setObjectName("windowTitle")
-        status_dot = QLabel()
-        status_dot.setFixedSize(8, 8)
-        status_dot.setObjectName("statusDot")
-        status_text = QLabel("로컬 모드")
-        status_text.setObjectName("statusText")
+        self._status_dot.setFixedSize(8, 8)
+        self._status_dot.setObjectName("statusDot")
+        self._status_text.setObjectName("statusText")
+        self._set_online_status(False)
 
         title_group = QVBoxLayout()
-        title_group.setSpacing(4)
+        title_group.setSpacing(3)
         title_group.addStretch(1)
         title_group.addWidget(title)
 
         status = QHBoxLayout()
         status.setSpacing(7)
-        status.addWidget(status_dot)
-        status.addWidget(status_text)
+        status.addWidget(self._status_dot)
+        status.addWidget(self._status_text)
         status.addStretch(1)
         title_group.addLayout(status)
         title_group.addStretch(1)
@@ -190,10 +300,16 @@ class MainWindow(QMainWindow):
 
         return layout
 
+    def _set_online_status(self, online: bool) -> None:
+        color = "#32d17c" if online else "#f04452"
+        text = "온라인" if online else "오프라인"
+        self._status_text.setText(text)
+        self._status_dot.setStyleSheet(f"background: {color}; border-radius: 4px;")
+
     def _tabs(self) -> QWidget:
         frame = QFrame()
         frame.setObjectName("tabsFrame")
-        frame.setFixedHeight(58)
+        frame.setFixedHeight(54)
 
         layout = QHBoxLayout(frame)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -203,105 +319,28 @@ class MainWindow(QMainWindow):
         todo = TabButton("할일", "check.png")
         memo = TabButton("메모", "memo.png")
 
+        for index, button in enumerate((chat, todo, memo)):
+            self._tabs_group.addButton(button, index)
+
+        self._tabs_group.idClicked.connect(self._content_stack.setCurrentIndex)
+
         layout.addWidget(chat)
         layout.addWidget(todo)
         layout.addWidget(memo)
 
         return frame
 
-    def _chat_panel(self) -> QWidget:
+    def _content_panel(self, object_name: str) -> QWidget:
         frame = QFrame()
-        frame.setObjectName("chatPanel")
+        frame.setObjectName(object_name)
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(22, 24, 22, 20)
+        layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(0)
 
-        layout.addWidget(self._user_message(), 0, Qt.AlignmentFlag.AlignRight)
-        layout.addSpacing(32)
-        layout.addLayout(self._assistant_message())
         layout.addStretch(1)
-        layout.addWidget(self._input_panel())
 
-        return frame
-
-    def _user_message(self) -> QWidget:
-        bubble = QFrame()
-        bubble.setObjectName("userBubble")
-        bubble.setFixedSize(278, 82)
-
-        layout = QVBoxLayout(bubble)
-        layout.setContentsMargins(18, 16, 18, 14)
-        layout.setSpacing(6)
-
-        text = QLabel("사용자 프로필 이미지 저장 함수")
-        text.setObjectName("bubbleText")
-        time = QLabel("오전 9:41")
-        time.setObjectName("timeText")
-        time.setAlignment(Qt.AlignmentFlag.AlignRight)
-
-        layout.addWidget(text)
-        layout.addWidget(time)
-
-        return bubble
-
-    def _assistant_message(self) -> QHBoxLayout:
-        layout = QHBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(12)
-        layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-
-        avatar = QLabel()
-        avatar.setFixedSize(46, 46)
-        avatar.setPixmap(
-            QPixmap(str(asset_path("characters", "myorii_profile.png"))).scaled(
-                avatar.size(),
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-        )
-
-        content = QVBoxLayout()
-        content.setSpacing(12)
-
-        message = QLabel("추천하는 함수명이에요!")
-        message.setObjectName("assistantText")
-        code = self._code_suggestion()
-        retry = QPushButton("다른 추천 보기")
-        retry.setObjectName("retryButton")
-        retry.setIcon(QIcon(str(asset_path("icons", "power.png"))))
-        retry.setIconSize(QSize(16, 16))
-        retry.setCursor(Qt.CursorShape.PointingHandCursor)
-
-        content.addWidget(message)
-        content.addWidget(code)
-        content.addWidget(retry, 0, Qt.AlignmentFlag.AlignLeft)
-
-        layout.addWidget(avatar)
-        layout.addLayout(content)
-
-        return layout
-
-    def _code_suggestion(self) -> QWidget:
-        frame = QFrame()
-        frame.setObjectName("codeBox")
-        frame.setFixedSize(292, 70)
-
-        layout = QHBoxLayout(frame)
-        layout.setContentsMargins(20, 0, 18, 0)
-        layout.setSpacing(12)
-
-        code = QLabel("saveUserProfileImage")
-        code.setObjectName("codeText")
-        copy = QPushButton()
-        copy.setObjectName("copyButton")
-        copy.setIcon(QIcon(str(asset_path("icons", "note.png"))))
-        copy.setIconSize(QSize(20, 20))
-        copy.setFixedSize(30, 30)
-        copy.setCursor(Qt.CursorShape.PointingHandCursor)
-
-        layout.addWidget(code)
-        layout.addStretch(1)
-        layout.addWidget(copy)
+        if object_name == "chatPanel":
+            layout.addWidget(self._input_panel())
 
         return frame
 
@@ -309,27 +348,16 @@ class MainWindow(QMainWindow):
         frame = QFrame()
         frame.setObjectName("inputPanel")
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(14, 16, 14, 14)
+        layout.setContentsMargins(10, 12, 10, 10)
         layout.setSpacing(14)
 
         history = QHBoxLayout()
-        history.setSpacing(8)
-        history_icon = QLabel()
-        history_icon.setPixmap(
-            QPixmap(str(asset_path("icons", "memo.png"))).scaled(
-                18,
-                18,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-        )
+        history.setSpacing(10)
         history_label = QLabel("대화 기록 저장")
         history_label.setObjectName("historyLabel")
-        toggle = QFrame()
-        toggle.setObjectName("toggleOff")
-        toggle.setFixedSize(34, 20)
+        toggle = SwitchButton()
+        toggle.setObjectName("historySwitch")
 
-        history.addWidget(history_icon)
         history.addWidget(history_label)
         history.addWidget(toggle)
         history.addStretch(1)
@@ -405,13 +433,8 @@ QWidget {
 
 #windowTitle {
     color: #11131a;
-    font-size: 20px;
+    font-size: 19px;
     font-weight: 700;
-}
-
-#statusDot {
-    background: #43d682;
-    border-radius: 4px;
 }
 
 #statusText {
@@ -421,13 +444,12 @@ QWidget {
 }
 
 #iconButton,
-#copyButton {
+#historySwitch {
     background: transparent;
     border: none;
 }
 
-#iconButton:hover,
-#copyButton:hover {
+#iconButton:hover {
     background: rgba(238, 242, 247, 180);
     border-radius: 15px;
 }
@@ -437,6 +459,10 @@ QWidget {
     border: 1px solid rgba(222, 227, 235, 170);
     border-top-left-radius: 17px;
     border-top-right-radius: 17px;
+}
+
+QStackedWidget {
+    background: transparent;
 }
 
 TabButton {
@@ -459,57 +485,15 @@ TabButton:hover {
     border-radius: 13px;
 }
 
-#chatPanel {
+#chatPanel,
+#todoPanel,
+#memoPanel {
     background: rgba(255, 255, 255, 132);
     border-left: 1px solid rgba(222, 227, 235, 150);
     border-right: 1px solid rgba(222, 227, 235, 150);
     border-bottom: 1px solid rgba(222, 227, 235, 150);
     border-bottom-left-radius: 17px;
     border-bottom-right-radius: 17px;
-}
-
-#userBubble {
-    background: #eef1fb;
-    border-radius: 18px;
-}
-
-#bubbleText {
-    color: #2f333b;
-    font-size: 15px;
-    font-weight: 500;
-}
-
-#timeText {
-    color: #77808e;
-    font-size: 12px;
-}
-
-#assistantText {
-    color: #333843;
-    font-size: 15px;
-    font-weight: 550;
-}
-
-#codeBox {
-    background: #ffffff;
-    border: 1px solid #e0e4ec;
-    border-radius: 14px;
-}
-
-#codeText {
-    color: #11131a;
-    font-family: "SF Mono", "Menlo", "Consolas";
-    font-size: 17px;
-    font-weight: 650;
-}
-
-#retryButton {
-    background: rgba(255, 255, 255, 150);
-    border: 1px solid #e3e7ef;
-    border-radius: 18px;
-    color: #4c5461;
-    font-size: 13px;
-    padding: 8px 14px;
 }
 
 #inputPanel {
@@ -521,11 +505,6 @@ TabButton:hover {
     color: #565f6e;
     font-size: 13px;
     font-weight: 550;
-}
-
-#toggleOff {
-    background: #dedfe4;
-    border-radius: 10px;
 }
 
 #promptWrap {
