@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import QApplication
 
 from platform.macos.menubar import MacMenuBar
 from ui.main_window import MainWindow
+from storage import database
 
 
 def main() -> int:
@@ -21,6 +22,8 @@ def main() -> int:
     app_lock.setStaleLockTime(1000)
     if not app_lock.tryLock(100):
         return 0
+    
+    database.initialize()
 
     window = MainWindow()
     menu_bar = MacMenuBar(window)
