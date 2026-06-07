@@ -35,6 +35,7 @@ from ui.assets import asset_path, tinted_icon
 from ui.chat_worker import ModelListWorker
 from ui.settings_view import SettingsView
 from ui.widgets.chat_view import ChatView
+from ui.widgets.todo_view import TodoView
 
 
 class InternetStatusWatcher(QObject):
@@ -314,11 +315,15 @@ class MainWindow(QMainWindow):
         frame = QFrame()
         frame.setObjectName(object_name)
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
         if object_name == "chatPanel":
+            layout.setContentsMargins(14, 14, 14, 14)
             layout.addWidget(self._chat_view, 1)
+        elif object_name == "todoPanel":
+            self._todo_view = TodoView()
+            layout.addWidget(self._todo_view, 1)
         else:
             layout.addStretch(1)
 
@@ -757,5 +762,101 @@ QScrollBar::sub-line:vertical {
 
 #exitActionButton:hover {
     background: rgba(255, 45, 45, 24);
+}
+
+#todoHeader {
+    border-bottom: 1px solid rgba(222, 227, 235, 150);
+    background: rgba(249, 251, 254, 120);
+}
+
+#todoTodayLabel {
+    color: #11131a;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+#todoDateLabel {
+    color: #8c94a2;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+#todoScrollArea,
+#todoListContent {
+    background: transparent;
+    border: none;
+}
+
+#todoItem {
+    background: #ffffff;
+    border: 1px solid rgba(222, 227, 235, 180);
+    border-radius: 8px;
+}
+
+#todoItem[dragging="true"] {
+    background: #f7fbff;
+    border: 1px solid rgba(47, 128, 255, 150);
+}
+
+#todoLabel {
+    color: #20242c;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 18px;
+}
+
+#todoAddBar {
+    border-top: 1px solid rgba(222, 227, 235, 150);
+    background: transparent;
+}
+
+#todoAddButton {
+    background: #ffffff;
+    border: 1px solid rgba(222, 227, 235, 180);
+    border-radius: 8px;
+    color: #667085;
+    font-size: 13px;
+    font-weight: 650;
+    margin: 10px 14px;
+    min-height: 38px;
+    padding: 0 12px;
+    text-align: left;
+}
+
+#todoAddButton:hover {
+    background: #f7fbff;
+    border: 1px solid rgba(47, 128, 255, 120);
+    color: #2f80ff;
+}
+
+#todoInputFrame {
+    background: #ffffff;
+    border-top: 1px solid rgba(222, 227, 235, 150);
+}
+
+#todoInput {
+    background: #f9fbfe;
+    border: 1px solid rgba(215, 221, 230, 200);
+    border-radius: 8px;
+    color: #20242c;
+    font-size: 13px;
+    padding: 8px 12px;
+    min-height: 36px;
+}
+
+#todoInput:focus {
+    border: 1px solid #2f80ff;
+}
+
+#todoCancelBtn {
+    background: transparent;
+    border: none;
+    color: #b0b8c8;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+#todoCancelBtn:hover {
+    color: #f04452;
 }
 """
