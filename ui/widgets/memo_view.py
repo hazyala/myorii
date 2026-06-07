@@ -488,6 +488,7 @@ class MemoCard(QFrame):
     V_MARGIN = 24
     MIN_HEIGHT = 88
     CHROME_WIDTH = 14 + 28 + 16 + H_MARGIN
+    BODY_MAX_LINES = 2
 
     def __init__(self, memo: Memo, parent_view: "MemoView") -> None:
         super().__init__()
@@ -545,15 +546,24 @@ class MemoCard(QFrame):
     def set_card_width(self, width: int) -> None:
         width = max(160, width)
         text_width = max(80, width - self.CHROME_WIDTH)
-        body_bounds = self._body.fontMetrics().boundingRect(
-            QRect(0, 0, text_width, 42),
-            int(Qt.TextFlag.TextWordWrap),
-            self._display_body(),
-        )
-        self._title.setFixedWidth(text_width)
-        self._body.setFixedSize(text_width, min(42, body_bounds.height() + 4))
-        self._date.setFixedWidth(text_width)
-        self.setFixedSize(width, self.MIN_HEIGHT)
+
+        title_metrics = self._title.fontMetrics()
+        body_metrics = self._body.fontMetrics()
+        date_metrics = self._date.fontMetrics()
+
+        self._title.setText(title_metrics.elidedText(self._display_title(), Qt.TextElideMode.ElideRight, text_width))
+        self._body.setText(self._elided_body(text_width))
+
+        title_height = title_metrics.height() + 2
+        body_lines = max(1, self._body.text().count("\n") + 1) if self._body.text() else 0
+        body_height = body_lines * body_metrics.lineSpacing()
+        date_height = date_metrics.height() + 2
+        content_height = title_height + body_height + date_height + 10
+
+        self._title.setFixedSize(text_width, title_height)
+        self._body.setFixedSize(text_width, body_height)
+        self._date.setFixedSize(text_width, date_height)
+        self.setFixedSize(width, max(self.MIN_HEIGHT, content_height + self.V_MARGIN))
 
     def eventFilter(self, watched, event) -> bool:  # noqa: N802
         if watched in (self._title, self._body, self._date):
@@ -615,7 +625,38 @@ class MemoCard(QFrame):
             if preview_line(line) and not line.strip().startswith("```")
         ]
         preview = " ".join(body_lines[1:] if len(body_lines) > 1 else body_lines)
-        return preview[:95] + ("..." if len(preview) > 95 else "")
+        return preview
+
+    def _elided_body(self, width: int) -> str:
+        text = self._display_body()
+        if not text:
+            return ""
+
+        metrics = self._body.fontMetrics()
+        lines: list[str] = []
+        current = ""
+        for word in text.split():
+            candidate = f"{current} {word}".strip()
+            if metrics.horizontalAdvance(candidate) <= width:
+                current = candidate
+                continue
+            if current:
+                lines.append(current)
+                current = word
+            else:
+                lines.append(metrics.elidedText(word, Qt.TextElideMode.ElideRight, width))
+                current = ""
+            if len(lines) == self.BODY_MAX_LINES:
+                break
+
+        if current and len(lines) < self.BODY_MAX_LINES:
+            lines.append(current)
+
+        consumed_words = " ".join(lines).replace("...", "").split()
+        if len(consumed_words) < len(text.split()) and lines:
+            lines[-1] = metrics.elidedText(lines[-1] + " ...", Qt.TextElideMode.ElideRight, width)
+
+        return "\n".join(lines[: self.BODY_MAX_LINES])
 
     def _display_date(self) -> str:
         value = self._memo.updated_at or self._memo.created_at
