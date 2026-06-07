@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import QEasingCurve, QPropertyAnimation, QSize, QTimer, Qt, pyqtSignal
-from PyQt6.QtGui import QIcon, QKeyEvent, QTextOption
+from PyQt6.QtGui import QColor, QIcon, QKeyEvent, QPainter, QPen, QPixmap, QTextOption
 from PyQt6.QtWidgets import (
     QFrame,
     QGraphicsOpacityEffect,
@@ -122,20 +122,18 @@ class ChatView(QWidget):
         frame = QFrame()
         frame.setObjectName("inputPanel")
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(10, 8, 10, 8)
-        layout.setSpacing(8)
+        layout.setContentsMargins(10, 8, 10, 0)
+        layout.setSpacing(4)
 
         input_actions = QHBoxLayout()
         input_actions.setSpacing(7)
 
-        attachment_button = QPushButton("+")
-        attachment_button.setObjectName("attachmentButton")
-        attachment_button.setFixedSize(22, 22)
-        attachment_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        attachment_button.setEnabled(False)
-
-        attachment_label = QLabel("첨부파일")
-        attachment_label.setObjectName("attachmentLabel")
+        history_list = QPushButton("채팅 기록")
+        history_list.setObjectName("historyListButton")
+        history_list.setIcon(self._list_icon())
+        history_list.setIconSize(QSize(15, 15))
+        history_list.setFixedHeight(28)
+        history_list.setCursor(Qt.CursorShape.PointingHandCursor)
 
         history_label = QLabel("대화 기록 저장")
         history_label.setObjectName("historyLabel")
@@ -143,8 +141,7 @@ class ChatView(QWidget):
         self._history_switch.setObjectName("historySwitch")
         self._history_switch.toggled.connect(self._set_history_enabled)
 
-        input_actions.addWidget(attachment_button)
-        input_actions.addWidget(attachment_label)
+        input_actions.addWidget(history_list)
         input_actions.addStretch(1)
         input_actions.addWidget(history_label)
         input_actions.addWidget(self._history_switch)
@@ -152,9 +149,13 @@ class ChatView(QWidget):
         prompt_wrap = QFrame()
         prompt_wrap.setObjectName("promptWrap")
         prompt_layout = QHBoxLayout(prompt_wrap)
-        prompt_layout.setContentsMargins(13, 7, 8, 7)
+        prompt_layout.setContentsMargins(13, 3, 8, 3)
         prompt_layout.setSpacing(7)
 
+        plus_button = QPushButton("+")
+        plus_button.setObjectName("promptPlusButton")
+        plus_button.setFixedSize(38, 38)
+        plus_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._prompt = ChatInput()
         self._send_button = QPushButton()
         self._send_button.setObjectName("sendButton")
@@ -165,6 +166,7 @@ class ChatView(QWidget):
         self._send_button.clicked.connect(self._prompt.request_send)
         self._prompt.send_requested.connect(self._send_message)
 
+        prompt_layout.addWidget(plus_button, 0, Qt.AlignmentFlag.AlignBottom)
         prompt_layout.addWidget(self._prompt, 1, Qt.AlignmentFlag.AlignVCenter)
         prompt_layout.addWidget(self._send_button, 0, Qt.AlignmentFlag.AlignBottom)
 
@@ -172,6 +174,18 @@ class ChatView(QWidget):
         layout.addWidget(prompt_wrap)
 
         return frame
+
+    def _list_icon(self) -> QIcon:
+        pixmap = QPixmap(16, 16)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(QColor("#565f6e"), 1.7))
+        for y in (4, 8, 12):
+            painter.drawPoint(3, y)
+            painter.drawLine(6, y, 13, y)
+        painter.end()
+        return QIcon(pixmap)
 
     def _send_message(self, text: str) -> None:
         if self._worker.is_running:
@@ -235,7 +249,11 @@ class ChatView(QWidget):
         ))
 
     def _available_message_width(self) -> int:
-        return self._scroll_area.viewport().width()
+        viewport_width = self._scroll_area.viewport().width()
+        own_width = self.width()
+        if own_width > 0:
+            viewport_width = min(viewport_width, own_width)
+        return max(0, viewport_width)
 
     def _show_copy_toast(self, _code: str) -> None:
         self._toast.adjustSize()

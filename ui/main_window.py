@@ -257,10 +257,17 @@ class MainWindow(QMainWindow):
         settings.setCursor(Qt.CursorShape.PointingHandCursor)
         settings.clicked.connect(self._show_settings_view)
 
+        close = QPushButton("×")
+        close.setObjectName("closeButton")
+        close.setFixedSize(32, 32)
+        close.setCursor(Qt.CursorShape.PointingHandCursor)
+        close.clicked.connect(self.hide)
+
         layout.addWidget(avatar)
         layout.addLayout(title_row)
         layout.addItem(QSpacerItem(20, 1, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum))
         layout.addWidget(settings, 0, Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(close, 0, Qt.AlignmentFlag.AlignVCenter)
 
         return layout
 
@@ -389,15 +396,24 @@ QWidget {
 }
 
 #iconButton,
+#closeButton,
 #attachmentButton,
+#promptPlusButton,
 #historySwitch {
     background: transparent;
     border: none;
 }
 
-#iconButton:hover {
+#iconButton:hover,
+#closeButton:hover {
     background: rgba(238, 242, 247, 180);
     border-radius: 15px;
+}
+
+#closeButton {
+    color: #555c68;
+    font-size: 18px;
+    font-weight: 500;
 }
 
 #attachmentButton {
@@ -417,6 +433,21 @@ QWidget {
     color: #565f6e;
     font-size: 12px;
     font-weight: 550;
+}
+
+#historyListButton {
+    background: #ffffff;
+    border: 1px solid rgba(215, 221, 230, 180);
+    border-radius: 8px;
+    color: #565f6e;
+    font-size: 12px;
+    font-weight: 650;
+    padding: 0 10px;
+}
+
+#historyListButton:hover {
+    background: #f7f9fc;
+    color: #565f6e;
 }
 
 #tabsFrame {
@@ -488,7 +519,7 @@ TabButton:hover {
 
 #assistantMessageBubble {
     background: #ffffff;
-    border: 1px solid rgba(222, 227, 235, 170);
+    border: none;
     border-radius: 14px;
 }
 
@@ -547,7 +578,7 @@ QScrollBar::sub-line:vertical {
     background: #ffffff;
     border: 1px solid #e0e4ec;
     border-radius: 17px;
-    min-height: 50px;
+    min-height: 45px;
 }
 
 #promptInput {
@@ -555,7 +586,7 @@ QScrollBar::sub-line:vertical {
     background: transparent;
     border: none;
     font-size: 13px;
-    line-height: 19px;
+    line-height: 20px;
 }
 
 #promptInput::placeholder {
@@ -568,8 +599,41 @@ QScrollBar::sub-line:vertical {
     border-radius: 19px;
 }
 
-#sendButton:hover {
+#promptPlusButton {
+    background: #f0f1f4;
+    color: #5d6572;
+    border-radius: 19px;
+    font-size: 16px;
+    font-weight: 650;
+}
+
+#sendButton:hover,
+#promptPlusButton:hover {
     background: #e8ebf1;
+}
+
+#codeBlockFrame {
+    background: rgba(232, 238, 247, 218);
+    border: 1px solid rgba(255, 255, 255, 190);
+    border-radius: 8px;
+}
+
+#codeCopyButton {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: #3d4b5f;
+    padding: 0;
+}
+
+#codeCopyButton:hover {
+    background: rgba(255, 255, 255, 120);
+}
+
+#pawLoadingIndicator,
+#pawLoadingDot {
+    background: transparent;
+    border: none;
 }
 
 #settingsPanel {
