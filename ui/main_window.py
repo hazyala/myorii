@@ -35,6 +35,7 @@ from ui.assets import asset_path, tinted_icon
 from ui.chat_worker import ModelListWorker
 from ui.settings_view import SettingsView
 from ui.widgets.chat_view import ChatView
+from ui.widgets.todo_view import TodoView
 
 
 class InternetStatusWatcher(QObject):
@@ -314,11 +315,15 @@ class MainWindow(QMainWindow):
         frame = QFrame()
         frame.setObjectName(object_name)
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
         if object_name == "chatPanel":
+            layout.setContentsMargins(14, 14, 14, 14)
             layout.addWidget(self._chat_view, 1)
+        elif object_name == "todoPanel":
+            self._todo_view = TodoView()
+            layout.addWidget(self._todo_view, 1)
         else:
             layout.addStretch(1)
 
@@ -757,5 +762,86 @@ QScrollBar::sub-line:vertical {
 
 #exitActionButton:hover {
     background: rgba(255, 45, 45, 24);
+}
+
+#todoHeader {
+    border-bottom: 1px solid rgba(222, 227, 235, 150);
+}
+
+#todoTodayLabel {
+    color: #11131a;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+#todoDateLabel {
+    color: #8c94a2;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+#todoScrollArea,
+#todoListContent {
+    background: transparent;
+}
+
+#todoItem {
+    background: #ffffff;
+    border: 1px solid rgba(222, 227, 235, 180);
+    border-radius: 12px;
+}
+
+#todoLabel {
+    color: #20242c;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+#todoAddBar {
+    border-top: 1px solid rgba(222, 227, 235, 150);
+    background: transparent;
+}
+
+#todoAddButton {
+    background: transparent;
+    border: none;
+    color: #8c94a2;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 13px 0;
+}
+
+#todoAddButton:hover {
+    color: #2f80ff;
+}
+
+#todoInputFrame {
+    background: transparent;
+}
+
+#todoInput {
+    background: #ffffff;
+    border: 1px solid rgba(215, 221, 230, 200);
+    border-radius: 10px;
+    color: #20242c;
+    font-size: 13px;
+    padding: 7px 12px;
+    min-height: 34px;
+}
+
+#todoInput:focus {
+    border: 1px solid #2f80ff;
+}
+
+#todoCancelBtn {
+    background: transparent;
+    border: none;
+    color: #b0b8c8;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+#todoCancelBtn:hover {
+    color: #f04452;
 }
 """
