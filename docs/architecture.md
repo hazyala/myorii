@@ -269,9 +269,11 @@ MainWindow toggle_at(icon_geometry)
 현재 `MainWindow`는 아래 UI 요소를 직접 구성한다.
 
 * 글래스 팝오버 외곽과 상단 포인터
-* Header의 Myorii 캐릭터, 설정 버튼, 온라인/오프라인 상태
+* Header의 Myorii 캐릭터, 설정 버튼, 앱 이름 옆 온라인/오프라인 상태
 * 채팅, 할일, 메모 탭과 탭별 컨텐츠 스택
+* 채팅 메시지 목록 전용 스크롤 영역
 * 채팅 입력 영역과 대화 기록 저장 스위치
+* `Enter` 전송, `Shift+Enter` 줄바꿈을 처리하는 입력 위젯
 
 채팅 메시지 렌더링은 Ollama 연동 이후 Core Layer와 연결한다.
 

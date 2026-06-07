@@ -31,6 +31,7 @@ Myorii는 메뉴바 및 시스템 트레이에 상주하며,
 * Ollama 연동 전 채팅 내용 영역은 비워 두고 입력 영역만 배치
 * 인터넷 연결 상태에 따른 온라인/오프라인 Header 표시 구현
 * 대화 기록 저장 스위치 UI 구현
+* 채팅 입력 Enter/Shift+Enter 동작, 자동 줄바꿈, 채팅 영역 단독 스크롤 구현
 * PyInstaller frozen 실행에서 로컬 `platform/` 패키지와 표준 라이브러리 `platform.py` 충돌 보정
 * `LSUIElement`가 적용된 PyInstaller `.app` 번들 설정 추가
 * 다음 작업: Ollama 연동 및 실제 채팅 메시지 렌더링
