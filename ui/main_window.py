@@ -35,6 +35,7 @@ from ui.assets import asset_path, tinted_icon
 from ui.chat_worker import ModelListWorker
 from ui.settings_view import SettingsView
 from ui.widgets.chat_view import ChatView
+from ui.widgets.memo_view import MemoView
 from ui.widgets.todo_view import TodoView
 
 
@@ -325,7 +326,8 @@ class MainWindow(QMainWindow):
             self._todo_view = TodoView()
             layout.addWidget(self._todo_view, 1)
         else:
-            layout.addStretch(1)
+            self._memo_view = MemoView()
+            layout.addWidget(self._memo_view, 1)
 
         return frame
 
@@ -858,5 +860,133 @@ QScrollBar::sub-line:vertical {
 
 #todoCancelBtn:hover {
     color: #f04452;
+}
+
+#memoHeader {
+    border-bottom: 1px solid rgba(222, 227, 235, 150);
+    background: rgba(249, 251, 254, 120);
+}
+
+#memoCountLabel {
+    color: #20242c;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+#memoScrollArea,
+#memoListContent {
+    background: transparent;
+    border: none;
+}
+
+#memoItem {
+    background: #ffffff;
+    border: 1px solid rgba(222, 227, 235, 180);
+    border-radius: 8px;
+}
+
+#memoItem[dragging="true"] {
+    background: #f7fbff;
+    border: 1px solid rgba(47, 128, 255, 150);
+}
+
+#memoDragHandle {
+    background: transparent;
+    border: none;
+    color: #b0b8c8;
+    font-size: 13px;
+    font-weight: 800;
+    padding: 0;
+}
+
+#memoDragHandle:hover {
+    color: #2f80ff;
+}
+
+#memoItemTitle {
+    color: #11131a;
+    font-size: 13px;
+    font-weight: 750;
+}
+
+#memoItemBody {
+    color: #737b88;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 17px;
+}
+
+#memoItemDate,
+#memoSaveState {
+    color: #8c94a2;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+#memoDeleteButton {
+    background: transparent;
+    border: none;
+    color: #b0b8c8;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+#memoDeleteButton:hover {
+    color: #f04452;
+}
+
+#memoAddBar {
+    border-top: 1px solid rgba(222, 227, 235, 150);
+    background: transparent;
+}
+
+#memoAddButton {
+    background: #ffffff;
+    border: 1px solid rgba(222, 227, 235, 180);
+    border-radius: 8px;
+    color: #20242c;
+    font-size: 13px;
+    font-weight: 650;
+    min-height: 38px;
+    padding: 0 12px;
+    text-align: left;
+}
+
+#memoAddButton:hover {
+    background: #f7fbff;
+    border: 1px solid rgba(47, 128, 255, 120);
+    color: #2f80ff;
+}
+
+#memoEditor {
+    background: transparent;
+}
+
+#memoBackButton {
+    background: #ffffff;
+    border: 1px solid rgba(222, 227, 235, 180);
+    border-radius: 8px;
+    color: #667085;
+    font-size: 20px;
+    font-weight: 500;
+}
+
+#memoBackButton:hover {
+    background: #f7fbff;
+    color: #2f80ff;
+}
+
+#memoTextEdit {
+    background: #ffffff;
+    border: 1px solid rgba(222, 227, 235, 190);
+    border-radius: 8px;
+    color: #20242c;
+    font-size: 13px;
+    line-height: 20px;
+    padding: 13px;
+}
+
+#memoTextEdit:focus {
+    border: 1px solid rgba(47, 128, 255, 170);
 }
 """
