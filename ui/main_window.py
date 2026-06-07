@@ -10,23 +10,26 @@ from PyQt6.QtGui import (
     QColor,
     QGuiApplication,
     QIcon,
+    QKeyEvent,
     QPainter,
     QPainterPath,
     QPixmap,
     QPolygonF,
+    QTextOption,
 )
 from PyQt6.QtWidgets import (
     QFrame,
     QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QMainWindow,
     QPushButton,
     QButtonGroup,
+    QScrollArea,
     QSizePolicy,
     QSpacerItem,
     QStackedWidget,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -146,9 +149,9 @@ class TabButton(QPushButton):
         self._icon_name = icon_name
         self.setCheckable(True)
         self.setChecked(active)
-        self.setIconSize(QSize(18, 18))
+        self.setIconSize(QSize(16, 16))
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setMinimumHeight(48)
+        self.setMinimumHeight(42)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.toggled.connect(lambda _checked: self._refresh_icon())
         self._refresh_icon()
@@ -163,14 +166,14 @@ class TabButton(QPushButton):
 
     def _refresh_icon(self, hovered: bool = False) -> None:
         color = QColor("#2f80ff") if self.isChecked() or hovered else QColor("#555c68")
-        self.setIcon(tinted_icon(self._icon_name, color, QSize(18, 18)))
+        self.setIcon(tinted_icon(self._icon_name, color, QSize(16, 16)))
 
 
 class SwitchButton(QPushButton):
     def __init__(self) -> None:
         super().__init__()
         self.setCheckable(True)
-        self.setFixedSize(42, 24)
+        self.setFixedSize(34, 20)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setText("")
         self.toggled.connect(self.update)
@@ -182,13 +185,59 @@ class SwitchButton(QPushButton):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         track_color = QColor("#2f80ff") if self.isChecked() else QColor("#dedfe4")
-        knob_x = self.width() - 21 if self.isChecked() else 3
+        knob_size = 16
+        knob_x = self.width() - knob_size - 2 if self.isChecked() else 2
 
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(track_color)
-        painter.drawRoundedRect(QRectF(0.5, 0.5, self.width() - 1, self.height() - 1), 12, 12)
+        painter.drawRoundedRect(QRectF(0.5, 0.5, self.width() - 1, self.height() - 1), 10, 10)
         painter.setBrush(QColor("#ffffff"))
-        painter.drawEllipse(QRectF(knob_x, 3, 18, 18))
+        painter.drawEllipse(QRectF(knob_x, 2, knob_size, knob_size))
+
+
+class ChatInput(QTextEdit):
+    send_requested = pyqtSignal(str)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setObjectName("promptInput")
+        self.setPlaceholderText("무엇을 도와줄까?")
+        self.setAcceptRichText(False)
+        self.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
+        self.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setContentsMargins(0, 0, 0, 0)
+        self.document().setDocumentMargin(2)
+        self.setFixedHeight(32)
+        self.textChanged.connect(self._fit_height_to_document)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                super().keyPressEvent(event)
+                return
+
+            self._request_send()
+            return
+
+        super().keyPressEvent(event)
+
+    def request_send(self) -> None:
+        self._request_send()
+
+    def _request_send(self) -> None:
+        text = self.toPlainText().strip()
+        if not text:
+            return
+
+        self.send_requested.emit(text)
+        self.clear()
+
+    def _fit_height_to_document(self) -> None:
+        line_count = max(1, self.toPlainText().count("\n") + 1)
+        next_height = 32 + ((line_count - 1) * 18)
+        self.setFixedHeight(min(next_height, 78))
 
 
 class MainWindow(QMainWindow):
@@ -236,11 +285,11 @@ class MainWindow(QMainWindow):
         root.setGraphicsEffect(shadow)
 
         layout = QVBoxLayout(root)
-        layout.setContentsMargins(14, 34, 14, 14)
+        layout.setContentsMargins(14, 32, 14, 14)
         layout.setSpacing(0)
 
         layout.addLayout(self._header())
-        layout.addSpacing(12)
+        layout.addSpacing(10)
         layout.addWidget(self._tabs())
         layout.addWidget(self._content_stack, 1)
 
@@ -257,7 +306,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(10)
 
         avatar = QLabel()
-        avatar.setFixedSize(52, 52)
+        avatar.setFixedSize(44, 44)
         avatar.setPixmap(
             QPixmap(str(asset_path("characters", "myorii_profile.png"))).scaled(
                 avatar.size(),
@@ -268,33 +317,27 @@ class MainWindow(QMainWindow):
 
         title = QLabel("Myorii")
         title.setObjectName("windowTitle")
-        self._status_dot.setFixedSize(8, 8)
+        self._status_dot.setFixedSize(7, 7)
         self._status_dot.setObjectName("statusDot")
         self._status_text.setObjectName("statusText")
         self._set_online_status(False)
 
-        title_group = QVBoxLayout()
-        title_group.setSpacing(3)
-        title_group.addStretch(1)
-        title_group.addWidget(title)
-
-        status = QHBoxLayout()
-        status.setSpacing(7)
-        status.addWidget(self._status_dot)
-        status.addWidget(self._status_text)
-        status.addStretch(1)
-        title_group.addLayout(status)
-        title_group.addStretch(1)
+        title_row = QHBoxLayout()
+        title_row.setSpacing(8)
+        title_row.addWidget(title)
+        title_row.addWidget(self._status_dot)
+        title_row.addWidget(self._status_text)
+        title_row.addStretch(1)
 
         settings = QPushButton()
         settings.setObjectName("iconButton")
         settings.setIcon(QIcon(str(asset_path("icons", "settings.png"))))
-        settings.setIconSize(QSize(22, 22))
-        settings.setFixedSize(38, 38)
+        settings.setIconSize(QSize(21, 21))
+        settings.setFixedSize(36, 36)
         settings.setCursor(Qt.CursorShape.PointingHandCursor)
 
         layout.addWidget(avatar)
-        layout.addLayout(title_group)
+        layout.addLayout(title_row)
         layout.addItem(QSpacerItem(20, 1, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum))
         layout.addWidget(settings, 0, Qt.AlignmentFlag.AlignVCenter)
 
@@ -309,7 +352,7 @@ class MainWindow(QMainWindow):
     def _tabs(self) -> QWidget:
         frame = QFrame()
         frame.setObjectName("tabsFrame")
-        frame.setFixedHeight(54)
+        frame.setFixedHeight(46)
 
         layout = QHBoxLayout(frame)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -334,25 +377,44 @@ class MainWindow(QMainWindow):
         frame = QFrame()
         frame.setObjectName(object_name)
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(14, 14, 14, 14)
         layout.setSpacing(0)
 
-        layout.addStretch(1)
-
         if object_name == "chatPanel":
+            layout.addWidget(self._chat_scroll_area(), 1)
             layout.addWidget(self._input_panel())
+        else:
+            layout.addStretch(1)
 
         return frame
+
+    def _chat_scroll_area(self) -> QWidget:
+        scroll_area = QScrollArea()
+        scroll_area.setObjectName("chatScrollArea")
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+        content = QWidget()
+        content.setObjectName("chatScrollContent")
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(10)
+        content_layout.addStretch(1)
+
+        scroll_area.setWidget(content)
+        return scroll_area
 
     def _input_panel(self) -> QWidget:
         frame = QFrame()
         frame.setObjectName("inputPanel")
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(10, 12, 10, 10)
-        layout.setSpacing(14)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(8)
 
         history = QHBoxLayout()
-        history.setSpacing(10)
+        history.setSpacing(7)
         history_label = QLabel("대화 기록 저장")
         history_label.setObjectName("historyLabel")
         toggle = SwitchButton()
@@ -365,22 +427,20 @@ class MainWindow(QMainWindow):
         prompt_wrap = QFrame()
         prompt_wrap.setObjectName("promptWrap")
         prompt_layout = QHBoxLayout(prompt_wrap)
-        prompt_layout.setContentsMargins(16, 0, 10, 0)
-        prompt_layout.setSpacing(8)
+        prompt_layout.setContentsMargins(13, 7, 8, 7)
+        prompt_layout.setSpacing(7)
 
-        prompt = QLineEdit()
-        prompt.setObjectName("promptInput")
-        prompt.setPlaceholderText("무엇을 도와줄까?")
-        prompt.setFrame(False)
+        prompt = ChatInput()
         send = QPushButton()
         send.setObjectName("sendButton")
         send.setIcon(QIcon(str(asset_path("icons", "send.png"))))
-        send.setIconSize(QSize(22, 22))
-        send.setFixedSize(46, 46)
+        send.setIconSize(QSize(19, 19))
+        send.setFixedSize(38, 38)
         send.setCursor(Qt.CursorShape.PointingHandCursor)
+        send.clicked.connect(prompt.request_send)
 
-        prompt_layout.addWidget(prompt)
-        prompt_layout.addWidget(send)
+        prompt_layout.addWidget(prompt, 1, Qt.AlignmentFlag.AlignVCenter)
+        prompt_layout.addWidget(send, 0, Qt.AlignmentFlag.AlignBottom)
 
         layout.addLayout(history)
         layout.addWidget(prompt_wrap)
@@ -433,13 +493,13 @@ QWidget {
 
 #windowTitle {
     color: #11131a;
-    font-size: 19px;
+    font-size: 18px;
     font-weight: 700;
 }
 
 #statusText {
     color: #69707c;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
 }
 
@@ -469,7 +529,7 @@ TabButton {
     background: transparent;
     border: none;
     color: #555c68;
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 650;
 }
 
@@ -501,23 +561,51 @@ TabButton:hover {
     border-top: 1px solid rgba(222, 227, 235, 170);
 }
 
+#chatScrollArea {
+    background: transparent;
+    border: none;
+}
+
+#chatScrollArea QWidget,
+#chatScrollContent {
+    background: transparent;
+}
+
+QScrollBar:vertical {
+    background: transparent;
+    width: 6px;
+    margin: 4px 0 4px 0;
+}
+
+QScrollBar::handle:vertical {
+    background: rgba(154, 164, 180, 105);
+    border-radius: 3px;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0;
+}
+
 #historyLabel {
     color: #565f6e;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 550;
 }
 
 #promptWrap {
     background: #ffffff;
     border: 1px solid #e0e4ec;
-    border-radius: 20px;
-    min-height: 58px;
+    border-radius: 17px;
+    min-height: 50px;
 }
 
 #promptInput {
     color: #222833;
     background: transparent;
-    font-size: 15px;
+    border: none;
+    font-size: 13px;
+    line-height: 19px;
 }
 
 #promptInput::placeholder {
@@ -527,7 +615,7 @@ TabButton:hover {
 #sendButton {
     background: #f0f1f4;
     border: none;
-    border-radius: 23px;
+    border-radius: 19px;
 }
 
 #sendButton:hover {
