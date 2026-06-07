@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import socket
 import threading
+import sys
 
 from PyQt6.QtCore import QObject, QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
@@ -343,6 +344,21 @@ class MainWindow(QMainWindow):
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
         self.setStyleSheet(STYLE_SHEET)
+        self._keep_open_on_deactivate()
+
+    def _keep_open_on_deactivate(self) -> None:
+        # 바깥 클릭(앱 비활성화) 시 자동으로 숨지 않도록. 아이콘 재클릭으로만 닫힘.
+        if sys.platform != "darwin":
+            return
+        try:
+            import objc
+
+            view = objc.objc_object(c_void_p=int(self.winId()))
+            ns_window = view.window()
+            if ns_window is not None:
+                ns_window.setHidesOnDeactivate_(False)
+        except Exception:
+            pass
 
 
 STYLE_SHEET = """
