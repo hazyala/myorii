@@ -44,7 +44,8 @@ Myorii는 메뉴바 및 시스템 트레이에 상주하며,
 * 채팅 입력 Enter/Shift+Enter 동작, 자동 줄바꿈, 채팅 영역 단독 스크롤 구현
 * PyInstaller frozen 실행에서 로컬 `platform/` 패키지와 표준 라이브러리 `platform.py` 충돌 보정
 * `LSUIElement`가 적용된 PyInstaller `.app` 번들 설정 추가
-* 다음 작업: 네이밍 기능, 이미지 첨부, 대화 기록 영구 저장
+* SQLite 기반 로컬 데이터 저장 구조 구현 (chat / todo / memo)
+* 다음 작업: 네이밍 기능, 이미지 첨부, 할일 UI, 메모 UI
 
 ---
 
@@ -306,11 +307,13 @@ Myorii는 단순한 AI 채팅 앱이 아니다.
 ☑ 설정 화면 앱 종료 구현
 ☑ 설정 화면 기본 UI 구현
 ☑ Ollama 연동
+☑ SQLite 로컬 DB 구조 구현 (chat / todo / memo)
 ☐ 설정 화면 UI 튜닝
 ☐ 네이밍 기능
 ☐ 이미지 분석
-☐ 메모 기능
+☐ 할일 UI (로컬 체크박스)
+☐ 메모 UI
 ☐ 설정 기능
 
-진행률 : 26%
+진행률 : 31%
 ```

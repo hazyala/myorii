@@ -131,6 +131,39 @@ core/
 
 ### 역할
 
+* 채팅 세션 및 메시지 저장
+* 할일 저장
+* 메모 저장
+* 파일 첨부 경로 저장
+
+### 구성
+
+```text
+storage/
+├── database.py       # DB 초기화, 스키마 생성, 연결 관리
+├── chat_store.py     # ChatSession / ChatMessage / ChatAttachment CRUD
+├── todo_store.py     # Todo CRUD
+└── memo_store.py     # Memo CRUD
+```
+
+### 스키마
+
+```text
+myorii.db
+├── chat_sessions     (id, title, created_at, updated_at)
+├── chat_messages     (id, session_id, role, content, created_at)
+├── chat_attachments  (id, message_id, file_path, mime_type, created_at)
+├── todos             (id, text, done, ord, created_at, updated_at)
+└── memos             (id, title, body, ord, created_at, updated_at)
+```
+
+DB 파일은 `~/Library/Application Support/Myorii/myorii.db`에 저장된다.  
+앱 재설치 후에도 데이터가 유지된다.  
+`ord` 컬럼은 float으로 드래그 재정렬 시 중간값 삽입 방식으로 전체 재정렬 없이 순서를 변경한다.  
+V3 클라우드 동기화 시 `chat_attachments`에 `remote_url` 컬럼을 추가해 로컬 파일 없이 URL 접근을 지원한다.
+
+### 역할
+
 * 메모 저장
 * 설정 저장
 * 세션 저장
