@@ -124,6 +124,7 @@ class SettingsView(QWidget):
         super().__init__()
         self.setObjectName("settingsPanel")
         self._models = models or [DEFAULT_MODEL]
+        self._model_combo: QComboBox | None = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -219,6 +220,7 @@ class SettingsView(QWidget):
         combo.addItems(self._available_models())
         combo.setCurrentText(DEFAULT_MODEL)
         combo.currentTextChanged.connect(self.model_changed.emit)
+        self._model_combo = combo
         model.add_control(combo)
         section.add_row(model)
 
@@ -276,3 +278,16 @@ class SettingsView(QWidget):
 
     def _available_models(self) -> list[str]:
         return self._models
+
+    def update_models(self, models: list[str]) -> None:
+        self._models = models or [DEFAULT_MODEL]
+        if self._model_combo is None:
+            return
+
+        current = self._model_combo.currentText() or DEFAULT_MODEL
+        next_current = current if current in self._models else DEFAULT_MODEL
+        self._model_combo.blockSignals(True)
+        self._model_combo.clear()
+        self._model_combo.addItems(self._models)
+        self._model_combo.setCurrentText(next_current)
+        self._model_combo.blockSignals(False)

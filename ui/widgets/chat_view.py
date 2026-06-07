@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from PyQt6.QtCore import QSize, QTimer, Qt, pyqtSignal
+from PyQt6.QtCore import QEasingCurve, QPropertyAnimation, QSize, QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import QIcon, QKeyEvent, QTextOption
 from PyQt6.QtWidgets import (
     QFrame,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -73,6 +74,18 @@ class ChatView(QWidget):
         self._worker = ChatWorker(self._chat_service)
         self._assistant_bubble: MessageBubble | None = None
         self._history_enabled = False
+        self._toast = QLabel("복사됨", self)
+        self._toast.setObjectName("copyToast")
+        self._toast.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._toast.hide()
+        self._toast_opacity = QGraphicsOpacityEffect(self._toast)
+        self._toast.setGraphicsEffect(self._toast_opacity)
+        self._toast_animation = QPropertyAnimation(self._toast_opacity, b"opacity", self)
+        self._toast_animation.setDuration(1200)
+        self._toast_animation.setStartValue(1.0)
+        self._toast_animation.setEndValue(0.0)
+        self._toast_animation.setEasingCurve(QEasingCurve.Type.InOutQuad)
+        self._toast_animation.finished.connect(self._toast.hide)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -166,12 +179,15 @@ class ChatView(QWidget):
 
         self._add_message("user", text)
         self._assistant_bubble = self._add_message("assistant", "")
+        self._assistant_bubble.show_loading_indicator()
         self._set_input_enabled(False)
         self._worker.start(text)
         self._scroll_to_bottom()
 
     def _add_message(self, role: str, text: str) -> MessageBubble:
         bubble = MessageBubble(role, text)
+        bubble.update_available_width(self._available_message_width())
+        bubble.code_copied.connect(self._show_copy_toast)
         insert_index = max(0, self._message_layout.count() - 1)
         self._message_layout.insertWidget(insert_index, bubble)
         self._scroll_to_bottom()
@@ -181,11 +197,13 @@ class ChatView(QWidget):
         if self._assistant_bubble is None:
             return
 
+        self._assistant_bubble.hide_loading_indicator()
         self._assistant_bubble.append_token(token)
         self._scroll_to_bottom()
 
     def _finish_response(self) -> None:
         if self._assistant_bubble is not None:
+            self._assistant_bubble.hide_loading_indicator()
             self._assistant_bubble.render_markdown()
         self._assistant_bubble = None
         self._set_input_enabled(True)
@@ -193,6 +211,7 @@ class ChatView(QWidget):
 
     def _show_error(self, message: str) -> None:
         if self._assistant_bubble is not None:
+            self._assistant_bubble.hide_loading_indicator()
             self._assistant_bubble.set_text(message)
             self._assistant_bubble.render_markdown()
             self._assistant_bubble = None
@@ -214,3 +233,31 @@ class ChatView(QWidget):
         QTimer.singleShot(0, lambda: self._scroll_area.verticalScrollBar().setValue(
             self._scroll_area.verticalScrollBar().maximum()
         ))
+
+    def _available_message_width(self) -> int:
+        return self._scroll_area.viewport().width()
+
+    def _show_copy_toast(self, _code: str) -> None:
+        self._toast.adjustSize()
+        self._toast.setFixedWidth(max(64, self._toast.width() + 18))
+        self._position_toast()
+        self._toast_opacity.setOpacity(1.0)
+        self._toast.show()
+        self._toast.raise_()
+        self._toast_animation.stop()
+        self._toast_animation.start()
+
+    def _position_toast(self) -> None:
+        self._toast.move(
+            (self.width() - self._toast.width()) // 2,
+            max(12, self.height() - self._toast.height() - 86),
+        )
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        width = self._available_message_width()
+        for index in range(self._message_layout.count()):
+            widget = self._message_layout.itemAt(index).widget()
+            if isinstance(widget, MessageBubble):
+                widget.update_available_width(width)
+        self._position_toast()

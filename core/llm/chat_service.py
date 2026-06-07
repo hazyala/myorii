@@ -38,10 +38,8 @@ class ChatService:
         if not text:
             return
 
-        if not self._client.is_available():
-            raise OllamaNotRunning("Ollama가 실행 중이 아니에요")
-
-        if self._model not in self._client.list_models():
+        models = self._client.list_models()
+        if self._model not in models:
             raise ModelNotFound(f"모델이 설치돼 있지 않아요: {self._model}")
 
         request_messages = [

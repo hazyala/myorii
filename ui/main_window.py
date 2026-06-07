@@ -3,6 +3,7 @@ from __future__ import annotations
 import socket
 import threading
 import sys
+from ctypes import c_void_p
 
 from PyQt6.QtCore import QObject, QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
@@ -31,6 +32,7 @@ from PyQt6.QtWidgets import (
 
 from core.llm.chat_service import ChatService
 from ui.assets import asset_path, tinted_icon
+from ui.chat_worker import ModelListWorker
 from ui.settings_view import SettingsView
 from ui.widgets.chat_view import ChatView
 
@@ -152,6 +154,8 @@ class MainWindow(QMainWindow):
         self._tabs_group = QButtonGroup(self)
         self._tabs_group.setExclusive(True)
         self._chat_service = ChatService()
+        self._model_list_worker = ModelListWorker(self._chat_service)
+        self._model_list_worker.models_loaded.connect(self._update_available_models)
         self._page_stack = QStackedWidget()
         self._content_stack = QStackedWidget()
         self._status_dot = QLabel()
@@ -206,12 +210,13 @@ class MainWindow(QMainWindow):
         self._content_stack.addWidget(self._content_panel("memoPanel"))
         self._content_stack.setCurrentIndex(0)
 
-        self._settings_view = SettingsView(self._chat_service.available_models())
+        self._settings_view = SettingsView()
         self._settings_view.back_requested.connect(self._show_main_view)
         self._settings_view.model_changed.connect(self._chat_view.set_model)
         self._page_stack.addWidget(main_page)
         self._page_stack.addWidget(self._settings_view)
         self._page_stack.setCurrentWidget(main_page)
+        self._model_list_worker.start()
 
         return root
 
@@ -264,6 +269,9 @@ class MainWindow(QMainWindow):
 
     def _show_main_view(self) -> None:
         self._page_stack.setCurrentIndex(0)
+
+    def _update_available_models(self, models: list[str]) -> None:
+        self._settings_view.update_models(models)
 
     def _set_online_status(self, online: bool) -> None:
         color = "#32d17c" if online else "#f04452"
@@ -501,6 +509,16 @@ TabButton:hover {
 
 #assistantAvatar {
     border-radius: 14px;
+}
+
+#copyToast {
+    background: rgba(32, 36, 44, 210);
+    color: #ffffff;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 650;
+    min-height: 28px;
+    padding: 0 10px;
 }
 
 QScrollBar:vertical {

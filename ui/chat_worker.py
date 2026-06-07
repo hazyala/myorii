@@ -42,3 +42,26 @@ class ChatWorker(QObject):
             self.finished.emit()
         except Exception as exc:
             self.error.emit(str(exc))
+
+
+class ModelListWorker(QObject):
+    models_loaded = pyqtSignal(list)
+
+    def __init__(self, chat_service: ChatService) -> None:
+        super().__init__()
+        self._chat_service = chat_service
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        if self.is_running:
+            return
+
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    @property
+    def is_running(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    def _run(self) -> None:
+        self.models_loaded.emit(self._chat_service.available_models())
