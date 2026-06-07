@@ -64,6 +64,20 @@ def reorder(memo_id: int, new_ord: float) -> None:
         )
 
 
+def reorder_many(memo_ids: list[int]) -> None:
+    """현재 UI 순서대로 ord를 다시 정렬"""
+    with get_connection() as conn:
+        conn.executemany(
+            """
+            UPDATE memos
+            SET ord = ?,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            WHERE id = ?
+            """,
+            [(float(index + 1), memo_id) for index, memo_id in enumerate(memo_ids)],
+        )
+
+
 def delete(memo_id: int) -> None:
     with get_connection() as conn:
         conn.execute("DELETE FROM memos WHERE id = ?", (memo_id,))
