@@ -20,6 +20,14 @@ a = Analysis(
             os.path.join("assets", "characters"),
         ),
         (
+            os.path.join(project_root, "prompts"),
+            "prompts",
+        ),
+        (
+            os.path.join(project_root, "core", "tools"),
+            os.path.join("core", "tools"),
+        ),
+        (
             os.path.join(sysconfig.get_path("stdlib"), "platform.py"),
             "stdlib",
         ),
