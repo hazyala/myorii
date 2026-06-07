@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import sys
 import socket
 import threading
-from pathlib import Path
 
 from PyQt6.QtCore import QObject, QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
@@ -34,35 +32,9 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-
-ASSET_ROOT = Path("assets")
-
-
-def asset_path(*parts: str) -> Path:
-    app_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
-    return app_root / ASSET_ROOT.joinpath(*parts)
-
-
-def tinted_icon(icon_name: str, color: QColor, size: QSize = QSize(20, 20)) -> QIcon:
-    pixmap = QPixmap(str(asset_path("icons", icon_name))).scaled(
-        size,
-        Qt.AspectRatioMode.KeepAspectRatio,
-        Qt.TransformationMode.SmoothTransformation,
-    )
-    if pixmap.isNull():
-        return QIcon(str(asset_path("icons", icon_name)))
-
-    tinted = QPixmap(pixmap.size())
-    tinted.fill(Qt.GlobalColor.transparent)
-
-    painter = QPainter(tinted)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.drawPixmap(0, 0, pixmap)
-    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
-    painter.fillRect(tinted.rect(), color)
-    painter.end()
-
-    return QIcon(tinted)
+from ui.assets import asset_path, tinted_icon
+from ui.settings_view import SettingsView
+from ui.widgets.switch_button import SwitchButton
 
 
 class InternetStatusWatcher(QObject):
@@ -169,32 +141,6 @@ class TabButton(QPushButton):
         self.setIcon(tinted_icon(self._icon_name, color, QSize(16, 16)))
 
 
-class SwitchButton(QPushButton):
-    def __init__(self) -> None:
-        super().__init__()
-        self.setCheckable(True)
-        self.setFixedSize(34, 20)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setText("")
-        self.toggled.connect(self.update)
-
-    def paintEvent(self, event) -> None:  # noqa: N802
-        del event
-
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        track_color = QColor("#2f80ff") if self.isChecked() else QColor("#dedfe4")
-        knob_size = 16
-        knob_x = self.width() - knob_size - 2 if self.isChecked() else 2
-
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(track_color)
-        painter.drawRoundedRect(QRectF(0.5, 0.5, self.width() - 1, self.height() - 1), 10, 10)
-        painter.setBrush(QColor("#ffffff"))
-        painter.drawEllipse(QRectF(knob_x, 2, knob_size, knob_size))
-
-
 class ChatInput(QTextEdit):
     send_requested = pyqtSignal(str)
 
@@ -252,6 +198,7 @@ class MainWindow(QMainWindow):
         self.setFixedSize(self.DEFAULT_SIZE)
         self._tabs_group = QButtonGroup(self)
         self._tabs_group.setExclusive(True)
+        self._page_stack = QStackedWidget()
         self._content_stack = QStackedWidget()
         self._status_dot = QLabel()
         self._status_text = QLabel("오프라인")
@@ -288,15 +235,27 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(14, 32, 14, 14)
         layout.setSpacing(0)
 
-        layout.addLayout(self._header())
-        layout.addSpacing(10)
-        layout.addWidget(self._tabs())
-        layout.addWidget(self._content_stack, 1)
+        layout.addWidget(self._page_stack, 1)
+
+        main_page = QWidget()
+        main_layout = QVBoxLayout(main_page)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        main_layout.addLayout(self._header())
+        main_layout.addSpacing(10)
+        main_layout.addWidget(self._tabs())
+        main_layout.addWidget(self._content_stack, 1)
 
         self._content_stack.addWidget(self._content_panel("chatPanel"))
         self._content_stack.addWidget(self._content_panel("todoPanel"))
         self._content_stack.addWidget(self._content_panel("memoPanel"))
         self._content_stack.setCurrentIndex(0)
+
+        self._settings_view = SettingsView()
+        self._settings_view.back_requested.connect(self._show_main_view)
+        self._page_stack.addWidget(main_page)
+        self._page_stack.addWidget(self._settings_view)
+        self._page_stack.setCurrentWidget(main_page)
 
         return root
 
@@ -335,6 +294,7 @@ class MainWindow(QMainWindow):
         settings.setIconSize(QSize(21, 21))
         settings.setFixedSize(36, 36)
         settings.setCursor(Qt.CursorShape.PointingHandCursor)
+        settings.clicked.connect(self._show_settings_view)
 
         layout.addWidget(avatar)
         layout.addLayout(title_row)
@@ -342,6 +302,12 @@ class MainWindow(QMainWindow):
         layout.addWidget(settings, 0, Qt.AlignmentFlag.AlignVCenter)
 
         return layout
+
+    def _show_settings_view(self) -> None:
+        self._page_stack.setCurrentWidget(self._settings_view)
+
+    def _show_main_view(self) -> None:
+        self._page_stack.setCurrentIndex(0)
 
     def _set_online_status(self, online: bool) -> None:
         color = "#32d17c" if online else "#f04452"
@@ -620,5 +586,128 @@ QScrollBar::sub-line:vertical {
 
 #sendButton:hover {
     background: #e8ebf1;
+}
+
+#settingsPanel {
+    background: transparent;
+}
+
+#settingsTitle {
+    color: #11131a;
+    font-size: 20px;
+    font-weight: 750;
+}
+
+#settingsSubtitle,
+#settingsRowCaption {
+    color: #737b88;
+    font-size: 12px;
+    font-weight: 550;
+}
+
+#settingsScrollArea {
+    background: transparent;
+    border: none;
+}
+
+#settingsScrollArea QWidget,
+#settingsScrollContent {
+    background: transparent;
+}
+
+#settingsSection,
+#exitActionButton {
+    background: rgba(255, 255, 255, 145);
+    border: 1px solid rgba(222, 227, 235, 155);
+    border-radius: 14px;
+}
+
+#settingsSectionHeader {
+    background: transparent;
+    border-bottom: 1px solid rgba(222, 227, 235, 135);
+}
+
+#settingsSectionTitle {
+    color: #171b22;
+    font-size: 14px;
+    font-weight: 750;
+}
+
+#settingsRow {
+    background: transparent;
+    border-top: 1px solid rgba(222, 227, 235, 112);
+}
+
+#settingsRowTitle {
+    color: #171b22;
+    font-size: 13px;
+    font-weight: 650;
+}
+
+#segmentedControl {
+    background: rgba(246, 248, 252, 170);
+    border: 1px solid #dfe4ed;
+    border-radius: 9px;
+}
+
+#segmentedControl QPushButton {
+    background: transparent;
+    border: none;
+    border-radius: 7px;
+    color: #626a76;
+    font-size: 12px;
+    font-weight: 650;
+    padding: 0 10px;
+}
+
+#segmentedControl QPushButton:checked {
+    background: #ffffff;
+    border: 1px solid #78aefe;
+    color: #2f80ff;
+}
+
+#modelComboBox {
+    background: #ffffff;
+    border: 1px solid #dfe4ed;
+    border-radius: 9px;
+    color: #2b3038;
+    padding: 0 10px;
+    font-size: 12px;
+}
+
+#secondaryButton,
+#ghostActionButton {
+    background: #ffffff;
+    border: 1px solid #dfe4ed;
+    border-radius: 9px;
+    color: #20242c;
+    font-size: 12px;
+    font-weight: 650;
+    min-height: 31px;
+    padding: 0 12px;
+}
+
+#secondaryButton:hover,
+#ghostActionButton:hover {
+    background: #f7f9fc;
+}
+
+#versionLabel {
+    color: #737b88;
+    font-size: 12px;
+    font-weight: 650;
+}
+
+#exitActionButton {
+    color: #ff2d2d;
+    font-size: 13px;
+    font-weight: 750;
+    min-height: 48px;
+    padding: 0 14px;
+    text-align: left;
+}
+
+#exitActionButton:hover {
+    background: rgba(255, 45, 45, 24);
 }
 """
