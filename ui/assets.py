@@ -1,18 +1,17 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap
 
+from core.paths import resource_path
 
 ASSET_ROOT = Path("assets")
 
 
 def asset_path(*parts: str) -> Path:
-    app_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
-    return app_root / ASSET_ROOT.joinpath(*parts)
+    return resource_path(str(ASSET_ROOT), *parts)
 
 
 def tinted_icon(icon_name: str, color: QColor, size: QSize = QSize(20, 20)) -> QIcon:
