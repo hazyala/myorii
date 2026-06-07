@@ -1,9 +1,19 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 
-from PyQt6.QtCore import QEvent, QPoint, QRect, QSize, Qt, QTimer
-from PyQt6.QtGui import QColor, QFont, QSyntaxHighlighter, QTextCharFormat, QTextOption
+from PyQt6.QtCore import QEvent, QPoint, QRect, QRectF, QSize, Qt, QSignalBlocker, QTimer
+from PyQt6.QtGui import (
+    QColor,
+    QFont,
+    QPainter,
+    QTextBlockFormat,
+    QSyntaxHighlighter,
+    QTextCharFormat,
+    QTextCursor,
+    QTextOption,
+)
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -25,50 +35,459 @@ LIST_MARGIN_X = 14
 ITEM_GAP = 8
 
 
+def preview_line(markdown: str) -> str:
+    text = markdown.strip()
+    text = re.sub(r"^#{1,6}\s*", "", text)
+    text = re.sub(r"^(?:[-*+]\s+)?\[[ xX]\]\s+", "", text)
+    text = re.sub(r"^[-*+]\s+", "", text)
+    text = re.sub(r"^\d+\.\s+", "", text)
+    text = re.sub(r'^"\s+', "", text)
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+    text = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"\1", text)
+    text = re.sub(r"(?<!~)~([^~]+)~(?!~)", r"\1", text)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    return text.strip()
+
+
 class MarkdownHighlighter(QSyntaxHighlighter):
     def __init__(self, document) -> None:
         super().__init__(document)
 
-        self._heading = QTextCharFormat()
-        self._heading.setForeground(QColor("#1f5fbf"))
-        self._heading.setFontWeight(QFont.Weight.Bold)
+        self._headings = []
+        for size in (23, 19, 16, 14, 13, 13):
+            fmt = QTextCharFormat()
+            fmt.setForeground(QColor("#11131a"))
+            fmt.setFontPointSize(size)
+            fmt.setFontWeight(QFont.Weight.Bold)
+            self._headings.append(fmt)
 
         self._marker = QTextCharFormat()
         self._marker.setForeground(QColor("#2f80ff"))
         self._marker.setFontWeight(QFont.Weight.DemiBold)
 
+        self._hidden_marker = QTextCharFormat()
+        self._hidden_marker.setForeground(QColor(0, 0, 0, 0))
+        self._hidden_marker.setFontPointSize(1)
+
         self._code = QTextCharFormat()
-        self._code.setForeground(QColor("#48566a"))
-        self._code.setBackground(QColor("#f1f5fb"))
+        self._code.setForeground(QColor("#344054"))
         self._code.setFontFamily("Menlo")
+        self._code.setFontPointSize(12)
+
+        self._inline_code = QTextCharFormat(self._code)
+        self._inline_code.setBackground(QColor("#e8eef7"))
+        self._inline_code.setForeground(QColor("#2d405a"))
+
+        self._bold = QTextCharFormat()
+        self._bold.setFontWeight(QFont.Weight.Bold)
+
+        self._italic = QTextCharFormat()
+        self._italic.setFontItalic(True)
+
+        self._strike = QTextCharFormat()
+        self._strike.setFontStrikeOut(True)
+
+        self._link = QTextCharFormat()
+        self._link.setForeground(QColor("#2f80ff"))
+        self._link.setFontUnderline(True)
+
+        self._quote = QTextCharFormat()
+        self._quote.setForeground(QColor("#667085"))
+        self._quote.setFontItalic(True)
 
     def highlightBlock(self, text: str) -> None:  # noqa: N802
+        in_code = self.previousBlockState() == 1
         stripped = text.lstrip()
         indent = len(text) - len(stripped)
-        if stripped.startswith("#"):
-            marker_len = len(stripped) - len(stripped.lstrip("#"))
-            self.setFormat(indent, marker_len, self._marker)
-            self.setFormat(indent + marker_len, len(text) - indent - marker_len, self._heading)
-        elif stripped.startswith(("- ", "* ", "+ ", "> ")):
-            self.setFormat(indent, 2, self._marker)
 
-        start = 0
-        while True:
-            first = text.find("`", start)
-            if first < 0:
-                break
-            second = text.find("`", first + 1)
-            if second < 0:
-                break
-            self.setFormat(first, second - first + 1, self._code)
-            start = second + 1
+        if stripped.startswith("```"):
+            self.setFormat(indent, len(stripped), self._hidden_marker)
+            self.setCurrentBlockState(0 if in_code else 1)
+            return
+
+        if in_code:
+            self.setFormat(0, len(text), self._code)
+            self.setCurrentBlockState(1)
+            return
+
+        self.setCurrentBlockState(0)
+
+        heading_match = re.match(r"^(#{1,6})(\s*)(.*)$", stripped)
+        if heading_match:
+            marker_len = len(heading_match.group(1)) + len(heading_match.group(2))
+            level = min(6, len(heading_match.group(1)))
+            self.setFormat(indent, marker_len, self._hidden_marker)
+            self.setFormat(indent + marker_len, len(text) - indent - marker_len, self._headings[level - 1])
+        elif checkbox_match := re.match(r"^(?:-\s+)?\[[ xX]\]\s+", stripped):
+            self.setFormat(indent, len(checkbox_match.group(0)), self._hidden_marker)
+        elif re.match(r"^\d+\.\s+", stripped):
+            marker_len = stripped.index(" ") + 1
+            self.setFormat(indent, marker_len, self._marker)
+        elif stripped.startswith(("- ", "* ", "+ ", '" ')):
+            marker_format = self._hidden_marker if stripped.startswith('" ') else self._marker
+            self.setFormat(indent, 2, marker_format)
+            if stripped.startswith('" '):
+                self.setFormat(indent + 2, len(text) - indent - 2, self._quote)
+
+        self._highlight_wrapped(text, r"`([^`]+)`", self._inline_code)
+        self._highlight_wrapped(text, r"\*\*([^*]+)\*\*", self._bold)
+        self._highlight_wrapped(text, r"(?<!\*)\*([^*]+)\*(?!\*)", self._italic)
+        self._highlight_wrapped(text, r"(?<!~)~([^~]+)~(?!~)", self._strike)
+        self._highlight_inline(text, r"\[[^\]]+\]\([^)]+\)", self._link, include_markers=False)
+
+    def _highlight_wrapped(self, text: str, pattern: str, fmt: QTextCharFormat) -> None:
+        for match in re.finditer(pattern, text):
+            marker_left = match.start(1) - match.start()
+            marker_right = match.end() - match.end(1)
+            self.setFormat(match.start(), marker_left, self._hidden_marker)
+            self.setFormat(match.start(1), match.end(1) - match.start(1), fmt)
+            self.setFormat(match.end(1), marker_right, self._hidden_marker)
+
+    def _highlight_inline(self, text: str, pattern: str, fmt: QTextCharFormat, include_markers: bool) -> None:
+        for match in re.finditer(pattern, text):
+            start = match.start() if include_markers else match.start()
+            length = match.end() - start
+            self.setFormat(start, length, fmt)
+
+
+class MemoTextEdit(QTextEdit):
+    def __init__(self) -> None:
+        super().__init__()
+        self._formatting_blocks = False
+        self.textChanged.connect(self._queue_block_styles)
+        self.cursorPositionChanged.connect(self._queue_block_styles)
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802
+        if (event.key() == Qt.Key.Key_Space or event.text() == " ") and self._expand_block_shortcut():
+            return
+        if event.key() == Qt.Key.Key_Tab:
+            self.insertPlainText("    ")
+            return
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and self._handle_code_block_return(event):
+            return
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and self._continue_list_block():
+            return
+        super().keyPressEvent(event)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton and self._toggle_checkbox_at(event.position().toPoint()):
+            return
+        super().mousePressEvent(event)
+
+    def _expand_block_shortcut(self) -> bool:
+        cursor = self.textCursor()
+        if cursor.hasSelection():
+            return False
+
+        block = cursor.block()
+        offset = cursor.position() - block.position()
+        prefix = block.text()[:offset]
+        match = re.match(r'^(\s*)(#{1,3}|[-*+]|\[\]|\[ \]|1\.|"|“|”)$', prefix)
+        if not match:
+            return False
+
+        indent, marker = match.groups()
+        replacements = {
+            "*": "- ",
+            "-": "- ",
+            "+": "- ",
+            "[]": "- [ ] ",
+            "[ ]": "- [ ] ",
+            "1.": "1. ",
+            '"': '" ',
+            "“": '" ',
+            "”": '" ',
+        }
+        replacement = indent + replacements.get(marker, f"{marker} ")
+        cursor.setPosition(block.position())
+        cursor.setPosition(block.position() + offset, QTextCursor.MoveMode.KeepAnchor)
+        cursor.insertText(replacement)
+        self.setTextCursor(cursor)
+        self._refresh_block_styles()
+        return True
+
+    def _handle_code_block_return(self, event) -> bool:
+        if not self._is_cursor_inside_code_block():
+            return False
+
+        cursor = self.textCursor()
+        if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+            cursor.insertText("\n")
+        else:
+            cursor.movePosition(QTextCursor.MoveOperation.EndOfBlock)
+            cursor.insertText("\n```\n")
+        self.setTextCursor(cursor)
+        self._queue_block_styles()
+        return True
+
+    def _is_cursor_inside_code_block(self) -> bool:
+        cursor = self.textCursor()
+        current = cursor.block()
+        if current.text().lstrip().startswith("```"):
+            return False
+
+        in_code = False
+        block = self.document().firstBlock()
+        while block.isValid():
+            if block == current:
+                return in_code
+            if block.text().lstrip().startswith("```"):
+                in_code = not in_code
+            block = block.next()
+        return False
+
+    def _continue_list_block(self) -> bool:
+        cursor = self.textCursor()
+        text = cursor.block().text()
+        match = re.match(r"^(\s*)([-*+]|\d+\.|- \[[ xX]\]|\[[ xX]\])\s+(.*)$", text)
+        if not match:
+            return False
+        if not match.group(3).strip():
+            cursor.select(QTextCursor.SelectionType.BlockUnderCursor)
+            cursor.removeSelectedText()
+            self.setTextCursor(cursor)
+            return True
+        marker = match.group(2)
+        if marker.endswith("."):
+            marker = f"{int(marker[:-1]) + 1}."
+        elif marker.startswith("- ["):
+            marker = "- [ ]"
+        cursor.insertText(f"\n{match.group(1)}{marker} ")
+        return True
+
+    def _queue_block_styles(self) -> None:
+        if self._formatting_blocks:
+            return
+        self._refresh_block_styles()
+
+    def _refresh_block_styles(self) -> None:
+        if self._formatting_blocks:
+            return
+
+        self._formatting_blocks = True
+        signal_blocker = QSignalBlocker(self)
+        active_cursor = self.textCursor()
+        cursor_position = active_cursor.position()
+        anchor_position = active_cursor.anchor()
+        in_code = False
+        block = self.document().firstBlock()
+        while block.isValid():
+            stripped = block.text().lstrip()
+            block_format = self._default_block_format()
+            if stripped.startswith("```"):
+                in_code = not in_code
+                block_format.setLineHeight(1, QTextBlockFormat.LineHeightTypes.FixedHeight.value)
+                block_format.setTopMargin(0)
+                block_format.setBottomMargin(0)
+            elif in_code:
+                block_format.setBackground(QColor("#eef3fa"))
+                block_format.setLeftMargin(14)
+                block_format.setRightMargin(14)
+                block_format.setTopMargin(3)
+                block_format.setBottomMargin(3)
+            elif self._checkbox_marker(stripped) is not None:
+                block_format.setLeftMargin(22)
+                block_format.setRightMargin(4)
+                block_format.setTopMargin(3)
+                block_format.setBottomMargin(3)
+            elif stripped.startswith('" '):
+                block_format.setBackground(QColor("#f6f8fb"))
+                block_format.setLeftMargin(12)
+                block_format.setRightMargin(8)
+                block_format.setTopMargin(4)
+                block_format.setBottomMargin(4)
+            elif re.match(r"^#{1,3}\s*", stripped):
+                block_format.setTopMargin(7)
+                block_format.setBottomMargin(5)
+
+            block_cursor = QTextCursor(block)
+            block_cursor.setBlockFormat(block_format)
+            block = block.next()
+
+        restored = self.textCursor()
+        restored.setPosition(anchor_position)
+        restored.setPosition(cursor_position, QTextCursor.MoveMode.KeepAnchor)
+        self.setTextCursor(restored)
+        del signal_blocker
+        self._formatting_blocks = False
+
+    def _default_block_format(self) -> QTextBlockFormat:
+        block_format = QTextBlockFormat()
+        block_format.setTopMargin(2)
+        block_format.setBottomMargin(2)
+        block_format.setLeftMargin(0)
+        block_format.setRightMargin(0)
+        return block_format
+
+    def refresh_block_styles(self) -> None:
+        self._refresh_block_styles()
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        painter = QPainter(self.viewport())
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self._paint_code_block_backgrounds(painter)
+        painter.end()
+
+        super().paintEvent(event)
+
+        painter = QPainter(self.viewport())
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self._paint_quote_markers(painter)
+        self._paint_checkboxes(painter)
+        painter.end()
+
+    def _paint_code_block_backgrounds(self, painter: QPainter) -> None:
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#eef3fa"))
+        for top, bottom in self._code_block_ranges():
+            rect = QRectF(self.viewport().rect().adjusted(8, 0, -8, 0))
+            rect.setTop(top)
+            rect.setBottom(bottom)
+            painter.drawRoundedRect(rect, 8, 8)
+
+    def _paint_quote_markers(self, painter: QPainter) -> None:
+        painter.setPen(Qt.PenStyle.NoPen)
+        block = self.document().firstBlock()
+        while block.isValid():
+            stripped = block.text().lstrip()
+            if stripped.startswith('" '):
+                rect = self.cursorRect(QTextCursor(block))
+                x = max(9, rect.left() - 8)
+                painter.setBrush(QColor("#cfd8e6"))
+                painter.drawRoundedRect(x, rect.top() - 1, 3, rect.height() + 4, 1.5, 1.5)
+            block = block.next()
+
+    def _paint_checkboxes(self, painter: QPainter) -> None:
+        block = self.document().firstBlock()
+        while block.isValid():
+            marker = self._checkbox_marker(block.text())
+            if marker is not None:
+                rect = self._checkbox_rect(block)
+                checked = marker.lower() in ("- [x]", "[x]")
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+                painter.setPen(QColor("#9aa6b8") if not checked else QColor("#2f80ff"))
+                painter.setBrush(QColor("#2f80ff") if checked else QColor("#ffffff"))
+                painter.drawRoundedRect(rect, 3, 3)
+                if checked:
+                    painter.setPen(QColor("#ffffff"))
+                    painter.drawLine(int(rect.left()) + 3, int(rect.center().y()), int(rect.left()) + 6, int(rect.bottom()) - 4)
+                    painter.drawLine(int(rect.left()) + 6, int(rect.bottom()) - 4, int(rect.right()) - 3, int(rect.top()) + 4)
+            block = block.next()
+
+    def _checkbox_marker(self, text: str) -> str | None:
+        match = re.match(r"^\s*(- \[[ xX]\]|\[[ xX]\])\s+", text)
+        return match.group(1) if match else None
+
+    def _checkbox_rect(self, block) -> QRectF:
+        cursor = QTextCursor(block)
+        rect = self.cursorRect(cursor)
+        return QRectF(rect.left() - 18, rect.top() + 3, 13, 13)
+
+    def _toggle_checkbox_at(self, point: QPoint) -> bool:
+        block = self.document().firstBlock()
+        while block.isValid():
+            marker = self._checkbox_marker(block.text())
+            hit_rect = self._checkbox_rect(block).adjusted(-3, -3, 5, 5)
+            if marker is not None and hit_rect.contains(float(point.x()), float(point.y())):
+                cursor = QTextCursor(block)
+                cursor.setPosition(block.position() + block.text().find(marker))
+                cursor.setPosition(cursor.position() + len(marker), QTextCursor.MoveMode.KeepAnchor)
+                cursor.insertText(self._toggled_checkbox_marker(marker))
+                self.setTextCursor(cursor)
+                self._queue_block_styles()
+                return True
+            block = block.next()
+        return False
+
+    def _toggled_checkbox_marker(self, marker: str) -> str:
+        checked = marker.lower() in ("- [x]", "[x]")
+        if marker.startswith("["):
+            return "[ ]" if checked else "[x]"
+        return "- [ ]" if checked else "- [x]"
+
+    def _code_block_ranges(self) -> list[tuple[int, int]]:
+        ranges: list[tuple[int, int]] = []
+        in_code = False
+        group_top: int | None = None
+        group_bottom: int | None = None
+        block = self.document().firstBlock()
+
+        while block.isValid():
+            stripped = block.text().lstrip()
+            if stripped.startswith("```"):
+                if in_code and group_top is not None and group_bottom is not None:
+                    ranges.append((group_top, group_bottom))
+                    group_top = None
+                    group_bottom = None
+                in_code = not in_code
+                block = block.next()
+                continue
+
+            if in_code:
+                rect = self.cursorRect(QTextCursor(block))
+                if group_top is None:
+                    group_top = rect.top() - 5
+                group_bottom = rect.bottom() + 5
+
+            block = block.next()
+
+        if in_code and group_top is not None and group_bottom is not None:
+            ranges.append((group_top, group_bottom))
+
+        return ranges
+
+
+class MemoDragHandle(QWidget):
+    def __init__(self, item: "MemoCard") -> None:
+        super().__init__()
+        self._item = item
+        self.setFixedSize(14, 20)
+        self.setCursor(Qt.CursorShape.OpenHandCursor)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.grabMouse()
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            self._item.begin_drag(event.globalPosition().toPoint(), grab_mouse=False)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        if event.buttons() & Qt.MouseButton.LeftButton:
+            self._item.update_drag(event.globalPosition().toPoint())
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
+            self._item.end_drag()
+            self.releaseMouse()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        del event
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#cdd2db"))
+        for row in range(3):
+            for col in range(2):
+                painter.drawEllipse(col * 6 + 1, row * 6 + 1, 3, 3)
+        painter.end()
 
 
 class MemoCard(QFrame):
     H_MARGIN = 24
     V_MARGIN = 24
-    MIN_HEIGHT = 84
-    CHROME_WIDTH = 24 + 28 + 14 + H_MARGIN
+    MIN_HEIGHT = 88
+    CHROME_WIDTH = 14 + 28 + 16 + H_MARGIN
 
     def __init__(self, memo: Memo, parent_view: "MemoView") -> None:
         super().__init__()
@@ -85,11 +504,7 @@ class MemoCard(QFrame):
         layout.setContentsMargins(12, 11, 12, 11)
         layout.setSpacing(8)
 
-        self._handle = QPushButton("::")
-        self._handle.setObjectName("memoDragHandle")
-        self._handle.setFixedSize(24, 28)
-        self._handle.setCursor(Qt.CursorShape.OpenHandCursor)
-        self._handle.installEventFilter(self)
+        self._handle = MemoDragHandle(self)
 
         text_col = QVBoxLayout()
         text_col.setContentsMargins(0, 0, 0, 0)
@@ -141,19 +556,6 @@ class MemoCard(QFrame):
         self.setFixedSize(width, self.MIN_HEIGHT)
 
     def eventFilter(self, watched, event) -> bool:  # noqa: N802
-        if watched is self._handle:
-            if event.type() == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
-                self._handle.setCursor(Qt.CursorShape.ClosedHandCursor)
-                self.begin_drag(event.globalPosition().toPoint())
-                return True
-            if event.type() == QEvent.Type.MouseMove and event.buttons() & Qt.MouseButton.LeftButton:
-                self.update_drag(event.globalPosition().toPoint())
-                return True
-            if event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
-                self._handle.setCursor(Qt.CursorShape.OpenHandCursor)
-                self.end_drag()
-                return True
-
         if watched in (self._title, self._body, self._date):
             if event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
                 self._parent_view.open_editor(self._memo)
@@ -171,8 +573,9 @@ class MemoCard(QFrame):
             return
         super().mouseReleaseEvent(event)
 
-    def begin_drag(self, global_pos: QPoint) -> None:
-        self.grabMouse()
+    def begin_drag(self, global_pos: QPoint, grab_mouse: bool = True) -> None:
+        if grab_mouse:
+            self.grabMouse()
         self._drag_active = True
         self.setProperty("dragging", True)
         self.style().unpolish(self)
@@ -195,11 +598,22 @@ class MemoCard(QFrame):
         title = self._memo.title.strip()
         if title:
             return title
-        first_line = next((line.strip("#*`- ") for line in self._memo.body.splitlines() if line.strip()), "")
+        first_line = next(
+            (
+                preview_line(line)
+                for line in self._memo.body.splitlines()
+                if preview_line(line) and not line.strip().startswith("```")
+            ),
+            "",
+        )
         return first_line or "제목 없는 메모"
 
     def _display_body(self) -> str:
-        body_lines = [line.strip() for line in self._memo.body.splitlines() if line.strip()]
+        body_lines = [
+            preview_line(line)
+            for line in self._memo.body.splitlines()
+            if preview_line(line) and not line.strip().startswith("```")
+        ]
         preview = " ".join(body_lines[1:] if len(body_lines) > 1 else body_lines)
         return preview[:95] + ("..." if len(preview) > 95 else "")
 
@@ -250,7 +664,7 @@ class MemoEditor(QFrame):
         top_row.addStretch(1)
         top_row.addWidget(self._save_state)
 
-        self._editor = QTextEdit()
+        self._editor = MemoTextEdit()
         self._editor.setObjectName("memoTextEdit")
         self._editor.setPlaceholderText("Markdown으로 메모를 작성하세요...")
         self._editor.setAcceptRichText(False)
@@ -268,6 +682,7 @@ class MemoEditor(QFrame):
         self._editor.blockSignals(True)
         self._editor.setPlainText(memo.body)
         self._editor.blockSignals(False)
+        self._editor.refresh_block_styles()
         self._save_state.setText("저장됨")
         QTimer.singleShot(0, self._editor.setFocus)
 
@@ -275,7 +690,14 @@ class MemoEditor(QFrame):
         if self._memo is None:
             return
         body = self._editor.toPlainText()
-        title = next((line.strip("#*`- ") for line in body.splitlines() if line.strip()), "")
+        title = next(
+            (
+                preview_line(line)
+                for line in body.splitlines()
+                if preview_line(line) and not line.strip().startswith("```")
+            ),
+            "",
+        )
         updated = memo_store.update(self._memo.id, title[:80], body)
         if updated is not None:
             self._memo = updated
@@ -359,7 +781,7 @@ class MemoView(QWidget):
 
         self._add_btn = QPushButton("새로운 메모")
         self._add_btn.setObjectName("memoAddButton")
-        self._add_btn.setIcon(tinted_icon("note.png", QColor("#667085"), QSize(17, 17)))
+        self._add_btn.setIcon(tinted_icon("memo.png", QColor("#667085"), QSize(17, 17)))
         self._add_btn.setIconSize(QSize(17, 17))
         self._add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._add_btn.clicked.connect(self.create_memo)

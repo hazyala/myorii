@@ -982,8 +982,10 @@ QScrollBar::sub-line:vertical {
     border-radius: 8px;
     color: #20242c;
     font-size: 13px;
-    line-height: 20px;
-    padding: 13px;
+    line-height: 21px;
+    padding: 16px;
+    selection-background-color: rgba(47, 128, 255, 42);
+    selection-color: #20242c;
 }
 
 #memoTextEdit:focus {
