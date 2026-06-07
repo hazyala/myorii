@@ -90,7 +90,7 @@ ui/
 ├── widgets/
 │   ├── chat_view.py
 │   ├── message_bubble.py
-│   ├── memo_view.py
+│   ├── todo_view.py
 │   └── settings_view.py
 └── styles/
 ```
@@ -159,7 +159,7 @@ myorii.db
 
 DB 파일은 `~/Library/Application Support/Myorii/myorii.db`에 저장된다.  
 앱 재설치 후에도 데이터가 유지된다.  
-`ord` 컬럼은 float으로 드래그 재정렬 시 중간값 삽입 방식으로 전체 재정렬 없이 순서를 변경한다.  
+`ord` 컬럼은 float으로 저장하고, 할 일 드래그 재정렬 완료 시 현재 UI 순서대로 다시 번호를 부여한다.  
 V3 클라우드 동기화 시 `chat_attachments`에 `remote_url` 컬럼을 추가해 로컬 파일 없이 URL 접근을 지원한다.
 
 ### 역할
@@ -249,6 +249,24 @@ Memo View
 ↓
 
 Memo Repository
+
+↓
+
+SQLite 저장
+```
+
+## 할 일
+
+```text
+사용자 입력 / 체크 / 드래그
+
+↓
+
+Todo View
+
+↓
+
+Todo Store
 
 ↓
 
@@ -348,7 +366,7 @@ packaging/macos/Myorii.spec
 빌드 명령은 다음과 같다.
 
 ```bash
-PYINSTALLER_CONFIG_DIR=/tmp/myorii_pyinstaller pyinstaller packaging/macos/Myorii.spec --noconfirm --clean
+PYINSTALLER_CONFIG_DIR=/tmp/myorii_pyinstaller .venv/bin/pyinstaller packaging/macos/Myorii.spec --noconfirm --clean
 ```
 
 ---

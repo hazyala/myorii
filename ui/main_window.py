@@ -766,6 +766,7 @@ QScrollBar::sub-line:vertical {
 
 #todoHeader {
     border-bottom: 1px solid rgba(222, 227, 235, 150);
+    background: rgba(249, 251, 254, 120);
 }
 
 #todoTodayLabel {
@@ -783,18 +784,25 @@ QScrollBar::sub-line:vertical {
 #todoScrollArea,
 #todoListContent {
     background: transparent;
+    border: none;
 }
 
 #todoItem {
     background: #ffffff;
     border: 1px solid rgba(222, 227, 235, 180);
-    border-radius: 12px;
+    border-radius: 8px;
+}
+
+#todoItem[dragging="true"] {
+    background: #f7fbff;
+    border: 1px solid rgba(47, 128, 255, 150);
 }
 
 #todoLabel {
     color: #20242c;
     font-size: 13px;
     font-weight: 500;
+    line-height: 18px;
 }
 
 #todoAddBar {
@@ -803,30 +811,37 @@ QScrollBar::sub-line:vertical {
 }
 
 #todoAddButton {
-    background: transparent;
-    border: none;
-    color: #8c94a2;
+    background: #ffffff;
+    border: 1px solid rgba(222, 227, 235, 180);
+    border-radius: 8px;
+    color: #667085;
     font-size: 13px;
-    font-weight: 500;
-    padding: 13px 0;
+    font-weight: 650;
+    margin: 10px 14px;
+    min-height: 38px;
+    padding: 0 12px;
+    text-align: left;
 }
 
 #todoAddButton:hover {
+    background: #f7fbff;
+    border: 1px solid rgba(47, 128, 255, 120);
     color: #2f80ff;
 }
 
 #todoInputFrame {
-    background: transparent;
+    background: #ffffff;
+    border-top: 1px solid rgba(222, 227, 235, 150);
 }
 
 #todoInput {
-    background: #ffffff;
+    background: #f9fbfe;
     border: 1px solid rgba(215, 221, 230, 200);
-    border-radius: 10px;
+    border-radius: 8px;
     color: #20242c;
     font-size: 13px;
-    padding: 7px 12px;
-    min-height: 34px;
+    padding: 8px 12px;
+    min-height: 36px;
 }
 
 #todoInput:focus {

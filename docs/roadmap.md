@@ -45,7 +45,10 @@ Myorii는 메뉴바 및 시스템 트레이에 상주하며,
 * PyInstaller frozen 실행에서 로컬 `platform/` 패키지와 표준 라이브러리 `platform.py` 충돌 보정
 * `LSUIElement`가 적용된 PyInstaller `.app` 번들 설정 추가
 * SQLite 기반 로컬 데이터 저장 구조 구현 (chat / todo / memo)
-* 다음 작업: 네이밍 기능, 이미지 첨부, 할일 UI, 메모 UI
+* 할일 탭 로컬 CRUD 시작점 구현
+* 할일 체크 완료 처리와 드래그 재정렬 구현
+* PyInstaller 번들에서 할일 카드 hitbox가 어긋나지 않도록 카드 opacity effect 제거
+* 다음 작업: 네이밍 기능, 이미지 첨부, 메모 UI, 할일 편집/삭제 UI
 
 ---
 
@@ -85,6 +88,14 @@ Myorii는 메뉴바 및 시스템 트레이에 상주하며,
 * 시작 시 실행
 * 앱 종료
 
+### 할 일
+
+* 로컬 SQLite 저장
+* 오늘 날짜 Header 표시
+* 체크 완료 처리
+* 드래그 재정렬
+* 새 할 일 추가
+
 ---
 
 ## 성공 기준
@@ -101,7 +112,7 @@ Myorii는 메뉴바 및 시스템 트레이에 상주하며,
 
 ## 목표
 
-할 일 관리 기능 추가
+로컬 할 일 관리 기능을 Notion과 연동
 
 ---
 
