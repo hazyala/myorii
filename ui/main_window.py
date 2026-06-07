@@ -379,16 +379,26 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(10, 8, 10, 8)
         layout.setSpacing(8)
 
-        history = QHBoxLayout()
-        history.setSpacing(7)
+        input_actions = QHBoxLayout()
+        input_actions.setSpacing(7)
+
+        attachment_button = QPushButton("+")
+        attachment_button.setObjectName("attachmentButton")
+        attachment_button.setFixedSize(22, 22)
+        attachment_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        attachment_label = QLabel("첨부파일")
+        attachment_label.setObjectName("attachmentLabel")
+
         history_label = QLabel("대화 기록 저장")
         history_label.setObjectName("historyLabel")
         toggle = SwitchButton()
         toggle.setObjectName("historySwitch")
 
-        history.addWidget(history_label)
-        history.addWidget(toggle)
-        history.addStretch(1)
+        input_actions.addWidget(attachment_button)
+        input_actions.addWidget(attachment_label)
+        input_actions.addStretch(1)
+        input_actions.addWidget(history_label)
+        input_actions.addWidget(toggle)
 
         prompt_wrap = QFrame()
         prompt_wrap.setObjectName("promptWrap")
@@ -408,7 +418,7 @@ class MainWindow(QMainWindow):
         prompt_layout.addWidget(prompt, 1, Qt.AlignmentFlag.AlignVCenter)
         prompt_layout.addWidget(send, 0, Qt.AlignmentFlag.AlignBottom)
 
-        layout.addLayout(history)
+        layout.addLayout(input_actions)
         layout.addWidget(prompt_wrap)
 
         return frame
@@ -470,6 +480,7 @@ QWidget {
 }
 
 #iconButton,
+#attachmentButton,
 #historySwitch {
     background: transparent;
     border: none;
@@ -478,6 +489,25 @@ QWidget {
 #iconButton:hover {
     background: rgba(238, 242, 247, 180);
     border-radius: 15px;
+}
+
+#attachmentButton {
+    color: #5d6572;
+    font-size: 15px;
+    font-weight: 650;
+    border: 1px solid rgba(215, 221, 230, 165);
+    border-radius: 11px;
+}
+
+#attachmentButton:hover {
+    background: rgba(238, 242, 247, 160);
+    color: #2f80ff;
+}
+
+#attachmentLabel {
+    color: #565f6e;
+    font-size: 12px;
+    font-weight: 550;
 }
 
 #tabsFrame {
