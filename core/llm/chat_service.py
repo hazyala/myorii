@@ -5,7 +5,7 @@ from collections.abc import Iterator
 from core.llm.contracts import ChatAttachmentPayload, ChatMessagePayload, ChatRequest
 from core.llm.ollama_client import ModelNotFound, OllamaClient, OllamaNotRunning
 from core.llm.prompt_loader import load_prompt
-from core.llm.router import InstantRouter, IntentRouter
+from core.llm.router import InstantRouter, IntentRouter, ModelRouter
 
 
 DEFAULT_MODEL = "qwen3-vl:4b"
@@ -17,6 +17,8 @@ class ChatService:
         self._client = client or OllamaClient()
         self._instant_router = InstantRouter()
         self._intent_router = IntentRouter()
+        self._model_router = ModelRouter(vision_model=self._model)
+        self._model_cache: list[str] | None = None
         self._messages: list[ChatMessagePayload] = []
 
     @property
@@ -25,13 +27,10 @@ class ChatService:
 
     def set_model(self, model: str) -> None:
         self._model = model or DEFAULT_MODEL
+        self._model_router = ModelRouter(vision_model=self._model)
 
     def available_models(self) -> list[str]:
-        try:
-            models = self._client.list_models()
-        except OllamaNotRunning:
-            models = []
-
+        models = self._list_models_cached()
         return [DEFAULT_MODEL, *(model for model in models if model != DEFAULT_MODEL)]
 
     def clear(self) -> None:
@@ -68,9 +67,27 @@ class ChatService:
             return
 
         route = self._intent_router.route(request)
-        models = self._client.list_models()
-        if self._model not in models:
-            raise ModelNotFound(f"모델이 설치돼 있지 않아요: {self._model}")
+        models = self._list_models_cached()
+        model_route = self._model_router.route(request, route.intent, tuple(models))
+        if model_route.model not in models:
+            raise ModelNotFound(f"모델이 설치돼 있지 않아요: {model_route.model}")
+
+        request = ChatRequest(
+            model=model_route.model,
+            system_prompt=request.system_prompt,
+            history=request.history,
+            user_message=request.user_message,
+            session_id=request.session_id,
+            request_id=request.request_id,
+            device=request.device,
+            created_at=request.created_at,
+            metadata={
+                **request.metadata,
+                "intent": route.intent,
+                "route_reason": route.reason,
+                "model_route_reason": model_route.reason,
+            },
+        )
 
         assistant_text = ""
 
@@ -83,6 +100,21 @@ class ChatService:
             ChatMessagePayload(
                 role="assistant",
                 content=assistant_text,
-                metadata={"intent": route.intent, "route_reason": route.reason},
+                metadata={
+                    "intent": route.intent,
+                    "route_reason": route.reason,
+                    "model": model_route.model,
+                    "model_route_reason": model_route.reason,
+                },
             )
         )
+
+    def _list_models_cached(self) -> list[str]:
+        if self._model_cache is not None:
+            return self._model_cache
+
+        try:
+            self._model_cache = self._client.list_models()
+        except OllamaNotRunning:
+            return []
+        return self._model_cache

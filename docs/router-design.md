@@ -238,6 +238,8 @@ vision_model
 
 설정 화면에서 사용자가 모델을 고를 수 있게 하되, 라우터는 이미지가 없는 짧은 요청을 fast text 모델로 보내는 기본값을 유지한다.
 
+3차 구현에서는 `ModelRouter.route(request, intent, available_models)`가 모델을 결정한다. 이미지 의도는 vision 모델을 유지하고, 텍스트 의도는 설치된 `MYORII_FAST_TEXT_MODEL` 또는 기본 `qwen3:1.7b`를 우선 사용한다. fast text 모델이 설치되어 있지 않으면 현재 선택 모델로 fallback한다. 모델 목록은 `ChatService`에서 캐시해 매 요청마다 `list_models()`를 호출하지 않는다.
+
 ---
 
 # AttachmentRouter
