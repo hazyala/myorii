@@ -4,7 +4,7 @@ from collections.abc import Iterator
 
 from core.llm.contracts import ChatAttachmentPayload, ChatMessagePayload, ChatRequest
 from core.llm.ollama_client import ModelNotFound, OllamaClient, OllamaNotRunning
-from core.llm.router import InstantRouter, IntentRouter, ModelRouter, PromptProfileResolver
+from core.llm.router import InstantRouter, IntentRouter, ModelRouter, PromptProfileResolver, ResponseFormatter
 
 
 DEFAULT_MODEL = "qwen3-vl:4b"
@@ -18,6 +18,7 @@ class ChatService:
         self._intent_router = IntentRouter()
         self._model_router = ModelRouter(vision_model=self._model)
         self._prompt_profile_resolver = PromptProfileResolver()
+        self._response_formatter = ResponseFormatter()
         self._model_cache: list[str] | None = None
         self._messages: list[ChatMessagePayload] = []
 
@@ -90,10 +91,16 @@ class ChatService:
         )
 
         assistant_text = ""
-
-        for token in self._client.stream_chat(request.model, request.messages()):
-            assistant_text += token
-            yield token
+        stream = self._client.stream_chat(request.model, request.messages())
+        if self._response_formatter.should_buffer(route.intent):
+            assistant_text = "".join(stream)
+            assistant_text = self._response_formatter.format(assistant_text, route.intent, request)
+            if assistant_text:
+                yield assistant_text
+        else:
+            for token in stream:
+                assistant_text += token
+                yield token
 
         self._messages.append(user_message)
         self._messages.append(
