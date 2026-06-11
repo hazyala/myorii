@@ -31,6 +31,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.llm.chat_service import ChatService
+from core.llm.contracts import ChatAttachmentPayload
 from ui.assets import asset_path
 from ui.chat_worker import ChatWorker
 from ui.widgets.message_bubble import MessageAttachment, MessageBubble
@@ -397,13 +398,14 @@ class ChatView(QWidget):
 
         request_text = self._message_text_with_attachments(text)
         message_attachments = self._message_attachments()
+        request_attachments = self._request_attachments()
         self._add_message("user", text, message_attachments)
         self._prompt.clear()
         self._clear_attachments()
         self._assistant_bubble = self._add_message("assistant", "")
         self._assistant_bubble.show_loading_indicator()
         self._set_input_enabled(False)
-        self._worker.start(request_text)
+        self._worker.start(request_text, request_attachments)
         self._scroll_to_bottom()
 
     def _add_message(
@@ -586,6 +588,13 @@ class ChatView(QWidget):
             )
             for attachment in self._attachments
         ]
+
+    def _request_attachments(self) -> tuple[ChatAttachmentPayload, ...]:
+        return tuple(
+            ChatAttachmentPayload.from_path(attachment.path)
+            for attachment in self._attachments
+            if attachment.is_image
+        )
 
     def _has_local_files(self, event: QDragEnterEvent | QDragMoveEvent | QDropEvent) -> bool:
         return bool(self._local_files_from_event(event))
