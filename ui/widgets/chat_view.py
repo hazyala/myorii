@@ -33,7 +33,7 @@ from PyQt6.QtWidgets import (
 from core.llm.chat_service import ChatService
 from ui.assets import asset_path
 from ui.chat_worker import ChatWorker
-from ui.widgets.message_bubble import MessageBubble
+from ui.widgets.message_bubble import MessageAttachment, MessageBubble
 from ui.widgets.switch_button import SwitchButton
 
 
@@ -395,18 +395,24 @@ class ChatView(QWidget):
         if not text and not self._attachments:
             return
 
-        display_text = self._message_text_with_attachments(text)
-        self._add_message("user", display_text)
+        request_text = self._message_text_with_attachments(text)
+        message_attachments = self._message_attachments()
+        self._add_message("user", text, message_attachments)
         self._prompt.clear()
         self._clear_attachments()
         self._assistant_bubble = self._add_message("assistant", "")
         self._assistant_bubble.show_loading_indicator()
         self._set_input_enabled(False)
-        self._worker.start(display_text)
+        self._worker.start(request_text)
         self._scroll_to_bottom()
 
-    def _add_message(self, role: str, text: str) -> MessageBubble:
-        bubble = MessageBubble(role, text)
+    def _add_message(
+        self,
+        role: str,
+        text: str,
+        attachments: list[MessageAttachment] | None = None,
+    ) -> MessageBubble:
+        bubble = MessageBubble(role, text, attachments)
         bubble.update_available_width(self._available_message_width())
         bubble.code_copied.connect(self._show_copy_toast)
         insert_index = max(0, self._message_layout.count() - 1)
@@ -569,6 +575,17 @@ class ChatView(QWidget):
         if not text:
             return f"첨부 파일:\n{names}"
         return f"{text}\n\n첨부 파일:\n{names}"
+
+    def _message_attachments(self) -> list[MessageAttachment]:
+        return [
+            MessageAttachment(
+                path=str(attachment.path),
+                name=attachment.name,
+                suffix=attachment.suffix,
+                is_image=attachment.is_image,
+            )
+            for attachment in self._attachments
+        ]
 
     def _has_local_files(self, event: QDragEnterEvent | QDragMoveEvent | QDropEvent) -> bool:
         return bool(self._local_files_from_event(event))

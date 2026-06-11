@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import re
 
 from PyQt6.QtCore import QSize, QTimer, Qt, pyqtSignal
@@ -18,6 +19,14 @@ from PyQt6.QtWidgets import (
 )
 
 from ui.assets import asset_path, tinted_icon
+
+
+@dataclass(frozen=True)
+class MessageAttachment:
+    path: str
+    name: str
+    suffix: str
+    is_image: bool
 
 
 class CodeHighlighter(QSyntaxHighlighter):
@@ -231,6 +240,61 @@ class CodeBlockWidget(QFrame):
         self._body.setFixedHeight(height)
 
 
+class UserAttachmentPreview(QFrame):
+    MIN_WIDTH = 132
+    MAX_WIDTH = 178
+
+    def __init__(self, attachment: MessageAttachment) -> None:
+        super().__init__()
+        self._attachment = attachment
+        self.setObjectName("userAttachmentPreview")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setFixedHeight(38)
+        self.setMinimumWidth(self.MIN_WIDTH)
+        self.setMaximumWidth(self.MAX_WIDTH)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 5, 9, 5)
+        layout.setSpacing(7)
+
+        thumbnail = QLabel()
+        thumbnail.setObjectName("userAttachmentThumbnail")
+        thumbnail.setFixedSize(28, 28)
+        thumbnail.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        if attachment.is_image:
+            pixmap = QPixmap(attachment.path)
+            if not pixmap.isNull():
+                thumbnail.setPixmap(
+                    pixmap.scaled(
+                        thumbnail.size(),
+                        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
+                )
+            else:
+                thumbnail.setText("IMG")
+        else:
+            thumbnail.setText(attachment.suffix.lstrip(".").upper()[:4] or "FILE")
+
+        name = QLabel(attachment.name)
+        name.setObjectName("userAttachmentName")
+        name.setToolTip(attachment.path)
+        name.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+
+        layout.addWidget(thumbnail)
+        layout.addWidget(name, 1)
+
+    def update_width(self, max_width: int) -> None:
+        next_width = max(self.MIN_WIDTH, min(self.MAX_WIDTH, max_width))
+        self.setFixedWidth(next_width)
+        name = self.findChild(QLabel, "userAttachmentName")
+        if name is None:
+            return
+        metrics = QFontMetrics(name.font())
+        available = max(44, next_width - 54)
+        name.setText(metrics.elidedText(self._attachment.name, Qt.TextElideMode.ElideRight, available))
+
+
 class MessageBubble(QWidget):
     code_copied = pyqtSignal(str)
 
@@ -240,12 +304,21 @@ class MessageBubble(QWidget):
     BUBBLE_HORIZONTAL_PADDING = 24
     MIN_BODY_WIDTH = 96
 
-    def __init__(self, role: str, text: str = "") -> None:
+    def __init__(
+        self,
+        role: str,
+        text: str = "",
+        attachments: list[MessageAttachment] | None = None,
+    ) -> None:
         super().__init__()
         self._role = role
         self._text = text
+        self._attachments = attachments or []
         self._available_width = 320
         self._indicator_step = 0
+        self._attachment_previews: list[UserAttachmentPreview] = []
+        self._attachment_container: QWidget | None = None
+        self._attachment_rows_layout: QVBoxLayout | None = None
         self._rendered_code_blocks: list[CodeBlockWidget] = []
         self.setObjectName(f"{role}MessageRow")
 
@@ -294,7 +367,23 @@ class MessageBubble(QWidget):
 
         if role == "user":
             row.addStretch(1)
-            row.addWidget(self._bubble)
+            self._user_stack = QWidget()
+            self._user_stack.setObjectName("userMessageStack")
+            stack_layout = QVBoxLayout(self._user_stack)
+            stack_layout.setContentsMargins(0, 0, 0, 0)
+            stack_layout.setSpacing(5)
+            if self._attachments:
+                self._attachment_container = QWidget()
+                self._attachment_container.setObjectName("userAttachmentGrid")
+                self._attachment_rows_layout = QVBoxLayout(self._attachment_container)
+                self._attachment_rows_layout.setContentsMargins(0, 0, 0, 0)
+                self._attachment_rows_layout.setSpacing(5)
+                for attachment in self._attachments:
+                    preview = UserAttachmentPreview(attachment)
+                    self._attachment_previews.append(preview)
+                stack_layout.addWidget(self._attachment_container)
+            stack_layout.addWidget(self._bubble, 0, Qt.AlignmentFlag.AlignRight)
+            row.addWidget(self._user_stack)
         else:
             avatar = QLabel()
             avatar.setObjectName("assistantAvatar")
@@ -322,6 +411,7 @@ class MessageBubble(QWidget):
         self._bubble.setMaximumWidth(body_width + self.BUBBLE_HORIZONTAL_PADDING)
         if isinstance(self._body, QLabel):
             self._body.setFixedWidth(self._user_body_width(body_width))
+        self._layout_attachment_previews(body_width)
         for block in self._rendered_code_blocks:
             block.update_width(body_width)
         self._sync_height()
@@ -370,6 +460,7 @@ class MessageBubble(QWidget):
                 self._body.set_code_ranges([])
         else:
             self._body.setText(text)
+            self._bubble.setVisible(bool(text.strip()))
 
     def _body_width(self) -> int:
         reserve = self.ASSISTANT_SIDE_RESERVE if self._role == "assistant" else self.USER_SIDE_RESERVE
@@ -383,6 +474,36 @@ class MessageBubble(QWidget):
         metrics = QFontMetrics(self._body.font())
         ideal = max((metrics.horizontalAdvance(line) for line in lines), default=0) + 2
         return max(24, min(max_width, ideal))
+
+    def _layout_attachment_previews(self, body_width: int) -> None:
+        if self._attachment_container is None or self._attachment_rows_layout is None:
+            return
+
+        while self._attachment_rows_layout.count():
+            item = self._attachment_rows_layout.takeAt(0)
+            row_widget = item.widget()
+            if row_widget is not None:
+                row_widget.deleteLater()
+
+        spacing = 6
+        columns = max(1, min(2, (body_width + spacing) // (UserAttachmentPreview.MIN_WIDTH + spacing)))
+        card_width = max(
+            UserAttachmentPreview.MIN_WIDTH,
+            min(UserAttachmentPreview.MAX_WIDTH, (body_width - spacing * (columns - 1)) // columns),
+        )
+
+        self._attachment_container.setFixedWidth(body_width)
+        for offset in range(0, len(self._attachment_previews), columns):
+            row_widget = QWidget()
+            row_widget.setObjectName("userAttachmentRow")
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(spacing)
+            row_layout.addStretch(1)
+            for preview in self._attachment_previews[offset : offset + columns]:
+                preview.update_width(card_width)
+                row_layout.addWidget(preview)
+            self._attachment_rows_layout.addWidget(row_widget)
 
     def _sync_height(self) -> None:
         body_width = self._body_width()
