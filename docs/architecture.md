@@ -26,6 +26,7 @@ Myorii는 macOS 메뉴바 및 Windows 시스템 트레이에 상주하는 로컬
 ┌─────────────────────┐
 │       Core          │
 ├─────────────────────┤
+│ Request Router      │
 │ LLM Client          │
 │ Naming Engine       │
 │ Image Analyzer      │
@@ -104,6 +105,9 @@ Myorii의 핵심 비즈니스 로직을 담당한다.
 ### 역할
 
 * Ollama 호출
+* 요청 라우팅
+* 의도별 프롬프트 선택
+* 텍스트/비전 모델 선택
 * 네이밍 추천
 * 이미지 분석
 * 응답 생성
@@ -117,13 +121,16 @@ core/
 ├── llm/
 │   ├── ollama_client.py
 │   ├── chat_service.py
-│   └── prompt_loader.py
+│   ├── prompt_loader.py
+│   └── router/
+├── integrations/      # 예정: Notion 등 외부 서비스 연동
+├── sync/              # 예정: local-first 동기화 엔진
 └── tools/
 ```
 
 `core/`는 Qt를 import하지 않는 순수 Python 계층이다. UI는 Ollama를 직접 호출하지 않고 `ChatService`를 통해서만 모델 목록 조회와 채팅 스트리밍을 요청한다.
 
-LLM 요청 라우팅, 의도별 프롬프트, 모델 선택, 첨부 처리, 응답 포맷터의 확장 설계는 [router-design.md](router-design.md)에서 관리한다.
+LLM 요청 라우팅, 의도별 프롬프트, 모델 선택, 첨부 처리, 응답 포맷터의 확장 설계는 [router-design.md](router-design.md)에서 관리한다. 라우터는 채팅 요청의 처리 경로만 결정하며, Notion API나 기기간 동기화 같은 외부 상태 변경은 `integrations/`와 `sync/` 계층에서 분리해 관리한다.
 
 ---
 

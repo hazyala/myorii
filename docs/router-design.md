@@ -388,6 +388,23 @@ LocalStore
 * 다른 기기가 온라인이 되면 서버에서 변경분을 받아 반영한다.
 * 충돌은 `revision`, `device_id`, `updated_at`을 기준으로 자동 병합하거나 `conflicted` 상태로 표시한다.
 
+라우터는 저장과 동기화를 직접 수행하지 않는다. 라우터의 책임은 `notion_save`, `sync_status`, `document_question`처럼 요청 의도를 분류하는 데서 끝난다. 실제 Notion API 호출은 `core/integrations/notion/`, Apple 기기간 동기화나 자체 서버 동기화는 `core/sync/`와 `storage/`가 담당한다.
+
+```text
+IntentRouter
+  -> tool/integration intent
+
+IntegrationService
+  -> Notion / external API
+
+LocalStore
+  -> Outbox
+  -> SyncEngine
+  -> iCloud / CloudKit / Server
+```
+
+이 경계 덕분에 라우터를 빠르게 유지하면서도, 이후 Notion 연동이나 Apple 기기간 동기화를 local-first 구조로 확장할 수 있다.
+
 ---
 
 # 구현 단계
