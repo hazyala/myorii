@@ -5,6 +5,7 @@ import threading
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from core.llm.chat_service import ChatService
+from core.llm.contracts import ChatAttachmentPayload
 
 
 class ChatWorker(QObject):
@@ -18,12 +19,12 @@ class ChatWorker(QObject):
         self._stop_requested = False
         self._thread: threading.Thread | None = None
 
-    def start(self, text: str) -> None:
+    def start(self, text: str, attachments: tuple[ChatAttachmentPayload, ...] = ()) -> None:
         if self.is_running:
             return
 
         self._stop_requested = False
-        self._thread = threading.Thread(target=self._run, args=(text,), daemon=True)
+        self._thread = threading.Thread(target=self._run, args=(text, attachments), daemon=True)
         self._thread.start()
 
     @property
@@ -33,9 +34,9 @@ class ChatWorker(QObject):
     def stop(self) -> None:
         self._stop_requested = True
 
-    def _run(self, text: str) -> None:
+    def _run(self, text: str, attachments: tuple[ChatAttachmentPayload, ...]) -> None:
         try:
-            for token in self._chat_service.send(text):
+            for token in self._chat_service.send(text, attachments):
                 if self._stop_requested:
                     break
                 self.token.emit(token)

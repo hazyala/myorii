@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
+from core.llm.contracts import ChatAttachmentPayload, ChatMessagePayload, ChatRequest
 from core.llm.ollama_client import ModelNotFound, OllamaClient, OllamaNotRunning
 from core.llm.prompt_loader import load_prompt
 
@@ -13,7 +14,7 @@ class ChatService:
     def __init__(self, model: str = DEFAULT_MODEL, client: OllamaClient | None = None) -> None:
         self._model = model
         self._client = client or OllamaClient()
-        self._messages: list[dict[str, str]] = []
+        self._messages: list[ChatMessagePayload] = []
 
     @property
     def model(self) -> str:
@@ -33,25 +34,31 @@ class ChatService:
     def clear(self) -> None:
         self._messages.clear()
 
-    def send(self, user_text: str) -> Iterator[str]:
+    def send(
+        self,
+        user_text: str,
+        attachments: tuple[ChatAttachmentPayload, ...] = (),
+    ) -> Iterator[str]:
         text = user_text.strip()
-        if not text:
+        if not text and not attachments:
             return
 
         models = self._client.list_models()
         if self._model not in models:
             raise ModelNotFound(f"모델이 설치돼 있지 않아요: {self._model}")
 
-        request_messages = [
-            {"role": "system", "content": load_prompt()},
-            *self._messages,
-            {"role": "user", "content": text},
-        ]
+        user_message = ChatMessagePayload(role="user", content=text, attachments=attachments)
+        request = ChatRequest(
+            model=self._model,
+            system_prompt=load_prompt(),
+            history=tuple(self._messages),
+            user_message=user_message,
+        )
         assistant_text = ""
 
-        for token in self._client.stream_chat(self._model, request_messages):
+        for token in self._client.stream_chat(request.model, request.messages()):
             assistant_text += token
             yield token
 
-        self._messages.append({"role": "user", "content": text})
-        self._messages.append({"role": "assistant", "content": assistant_text})
+        self._messages.append(user_message)
+        self._messages.append(ChatMessagePayload(role="assistant", content=assistant_text))

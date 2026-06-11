@@ -541,6 +541,36 @@ TabButton:hover {
     color: #ffffff;
 }
 
+#userMessageStack,
+#userAttachmentGrid,
+#userAttachmentRow {
+    background: transparent;
+    border: none;
+}
+
+#userAttachmentPreview {
+    background: rgba(47, 128, 255, 32);
+    border: 1px solid rgba(47, 128, 255, 76);
+    border-radius: 11px;
+}
+
+#userAttachmentThumbnail {
+    background: rgba(47, 128, 255, 42);
+    border: 1px solid rgba(47, 128, 255, 66);
+    border-radius: 8px;
+    color: #276dbc;
+    font-size: 9px;
+    font-weight: 750;
+}
+
+#userAttachmentName {
+    background: transparent;
+    border: none;
+    color: #2367b4;
+    font-size: 12px;
+    font-weight: 650;
+}
+
 #assistantMessageBody {
     color: #222833;
 }
@@ -586,6 +616,47 @@ QScrollBar::sub-line:vertical {
     border: 1px solid #e0e4ec;
     border-radius: 17px;
     min-height: 45px;
+}
+
+#attachmentPreviewArea,
+#attachmentPreviewContent {
+    background: transparent;
+    border: none;
+}
+
+#attachmentPreview {
+    background: rgba(255, 255, 255, 185);
+    border: 1px solid rgba(224, 228, 236, 190);
+    border-radius: 12px;
+}
+
+#attachmentThumbnail {
+    background: #f0f3f8;
+    border: 1px solid rgba(224, 228, 236, 190);
+    border-radius: 8px;
+    color: #596474;
+    font-size: 9px;
+    font-weight: 750;
+}
+
+#attachmentName {
+    color: #252b35;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+#attachmentRemoveButton {
+    background: rgba(232, 235, 241, 170);
+    border: none;
+    border-radius: 10px;
+    color: #657083;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+#attachmentRemoveButton:hover {
+    background: rgba(222, 226, 235, 220);
+    color: #2f3744;
 }
 
 #promptInput {

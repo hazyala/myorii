@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import base64
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import ollama
+
+from core.llm.contracts import ChatMessagePayload
 
 
 class OllamaError(RuntimeError):
@@ -43,9 +47,11 @@ class OllamaClient:
                 names.append(str(name))
         return names
 
-    def stream_chat(self, model: str, messages: list[dict[str, str]]) -> Iterator[str]:
+    def stream_chat(self, model: str, messages: list[ChatMessagePayload]) -> Iterator[str]:
+        ollama_messages = self._to_ollama_messages(messages)
+
         try:
-            stream = self._client.chat(model=model, messages=messages, stream=True)
+            stream = self._client.chat(model=model, messages=ollama_messages, stream=True)
             for chunk in stream:
                 content = self._value(self._value(chunk, "message", {}), "content", "")
                 if content:
@@ -62,3 +68,26 @@ class OllamaClient:
         if isinstance(data, dict):
             return data.get(key, default)
         return getattr(data, key, default)
+
+    def _to_ollama_messages(self, messages: list[ChatMessagePayload]) -> list[dict[str, Any]]:
+        ollama_messages: list[dict[str, Any]] = []
+        for message in messages:
+            ollama_message: dict[str, Any] = {
+                "role": message.role,
+                "content": message.content,
+            }
+            images = [
+                self._image_to_base64(Path(attachment.path))
+                for attachment in message.attachments
+                if attachment.is_image
+            ]
+            if images:
+                ollama_message["images"] = images
+            ollama_messages.append(ollama_message)
+        return ollama_messages
+
+    def _image_to_base64(self, path: Path) -> str:
+        try:
+            return base64.b64encode(path.read_bytes()).decode("ascii")
+        except OSError as exc:
+            raise OllamaError(f"이미지 파일을 읽을 수 없어요: {path.name}") from exc
