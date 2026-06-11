@@ -206,6 +206,8 @@ spreadsheet_question        -> retrieval-augmented generation, RAG
 
 단순 채팅과 번역은 예시가 많을수록 느려지므로 zero-shot prompting을 사용한다. 네이밍, 명령어, 커밋/PR, 코드 캡처 복원은 출력 형식이 중요하므로 few-shot prompting으로 예시를 제공한다. PDF/문서/스프레드시트는 본문 전체를 넣지 않고 필요한 일부만 추출해 RAG 방식으로 확장한다.
 
+4차 구현에서는 `PromptProfileResolver`가 공통 `system.md`와 `prompts/profiles/`의 의도별 프로필을 조립한다. `system.md`는 Myorii의 정체성과 공통 응답 원칙만 담고, 네이밍/번역/명령어/커밋/이미지 규칙은 profile 파일로 분리한다.
+
 ---
 
 # ModelRouter

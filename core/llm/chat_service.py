@@ -4,8 +4,7 @@ from collections.abc import Iterator
 
 from core.llm.contracts import ChatAttachmentPayload, ChatMessagePayload, ChatRequest
 from core.llm.ollama_client import ModelNotFound, OllamaClient, OllamaNotRunning
-from core.llm.prompt_loader import load_prompt
-from core.llm.router import InstantRouter, IntentRouter, ModelRouter
+from core.llm.router import InstantRouter, IntentRouter, ModelRouter, PromptProfileResolver
 
 
 DEFAULT_MODEL = "qwen3-vl:4b"
@@ -18,6 +17,7 @@ class ChatService:
         self._instant_router = InstantRouter()
         self._intent_router = IntentRouter()
         self._model_router = ModelRouter(vision_model=self._model)
+        self._prompt_profile_resolver = PromptProfileResolver()
         self._model_cache: list[str] | None = None
         self._messages: list[ChatMessagePayload] = []
 
@@ -48,7 +48,6 @@ class ChatService:
         user_message = ChatMessagePayload(role="user", content=text, attachments=attachments)
         request = ChatRequest(
             model=self._model,
-            system_prompt=load_prompt(),
             history=tuple(self._messages),
             user_message=user_message,
         )
@@ -67,6 +66,7 @@ class ChatService:
             return
 
         route = self._intent_router.route(request)
+        system_prompt = self._prompt_profile_resolver.resolve(route.intent)
         models = self._list_models_cached()
         model_route = self._model_router.route(request, route.intent, tuple(models))
         if model_route.model not in models:
@@ -74,7 +74,7 @@ class ChatService:
 
         request = ChatRequest(
             model=model_route.model,
-            system_prompt=request.system_prompt,
+            system_prompt=system_prompt,
             history=request.history,
             user_message=request.user_message,
             session_id=request.session_id,

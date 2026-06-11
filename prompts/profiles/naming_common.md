@@ -1,0 +1,10 @@
+# naming_common
+
+- 후보는 3~5개만 제안한다.
+- 가장 무난한 후보를 첫 번째에 둔다.
+- 각 후보는 별도 코드블록으로 분리한다.
+- 코드블록 안에는 설명, 번호, 주석을 넣지 않는다.
+- 설명은 코드블록 전후로 아주 짧게만 둔다.
+- Python 함수/변수는 `snake_case`, 클래스는 `PascalCase`를 따른다.
+- JavaScript/TypeScript 함수/변수는 `camelCase`, 클래스와 컴포넌트는 `PascalCase`를 따른다.
+- 상수와 환경변수는 `UPPER_SNAKE_CASE`를 따른다.
