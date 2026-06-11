@@ -541,6 +541,36 @@ TabButton:hover {
     color: #ffffff;
 }
 
+#userMessageStack,
+#userAttachmentGrid,
+#userAttachmentRow {
+    background: transparent;
+    border: none;
+}
+
+#userAttachmentPreview {
+    background: rgba(47, 128, 255, 32);
+    border: 1px solid rgba(47, 128, 255, 76);
+    border-radius: 11px;
+}
+
+#userAttachmentThumbnail {
+    background: rgba(47, 128, 255, 42);
+    border: 1px solid rgba(47, 128, 255, 66);
+    border-radius: 8px;
+    color: #276dbc;
+    font-size: 9px;
+    font-weight: 750;
+}
+
+#userAttachmentName {
+    background: transparent;
+    border: none;
+    color: #2367b4;
+    font-size: 12px;
+    font-weight: 650;
+}
+
 #assistantMessageBody {
     color: #222833;
 }
