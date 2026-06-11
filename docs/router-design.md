@@ -78,6 +78,8 @@ InstantRouter.match(request) -> InstantResponse | None
 
 InstantRouter가 응답을 만들면 `ChatService`는 Ollama를 호출하지 않는다.
 
+1차 구현에서는 첨부 파일이 없는 짧은 번역, 단어 뜻, 식사/커피 추천 요청만 처리한다. 그 외 요청은 기존 LLM 경로로 넘겨 브랜드 톤을 해치지 않는 범위에서 즉시 응답 경로를 확장한다.
+
 ---
 
 # IntentRouter

@@ -5,6 +5,7 @@ from collections.abc import Iterator
 from core.llm.contracts import ChatAttachmentPayload, ChatMessagePayload, ChatRequest
 from core.llm.ollama_client import ModelNotFound, OllamaClient, OllamaNotRunning
 from core.llm.prompt_loader import load_prompt
+from core.llm.router import InstantRouter
 
 
 DEFAULT_MODEL = "qwen3-vl:4b"
@@ -14,6 +15,7 @@ class ChatService:
     def __init__(self, model: str = DEFAULT_MODEL, client: OllamaClient | None = None) -> None:
         self._model = model
         self._client = client or OllamaClient()
+        self._instant_router = InstantRouter()
         self._messages: list[ChatMessagePayload] = []
 
     @property
@@ -43,10 +45,6 @@ class ChatService:
         if not text and not attachments:
             return
 
-        models = self._client.list_models()
-        if self._model not in models:
-            raise ModelNotFound(f"모델이 설치돼 있지 않아요: {self._model}")
-
         user_message = ChatMessagePayload(role="user", content=text, attachments=attachments)
         request = ChatRequest(
             model=self._model,
@@ -54,6 +52,24 @@ class ChatService:
             history=tuple(self._messages),
             user_message=user_message,
         )
+
+        instant_response = self._instant_router.match(request)
+        if instant_response is not None:
+            self._messages.append(user_message)
+            self._messages.append(
+                ChatMessagePayload(
+                    role="assistant",
+                    content=instant_response.content,
+                    metadata={"intent": instant_response.intent, "route": "instant"},
+                )
+            )
+            yield instant_response.content
+            return
+
+        models = self._client.list_models()
+        if self._model not in models:
+            raise ModelNotFound(f"모델이 설치돼 있지 않아요: {self._model}")
+
         assistant_text = ""
 
         for token in self._client.stream_chat(request.model, request.messages()):
