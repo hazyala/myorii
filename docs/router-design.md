@@ -264,11 +264,13 @@ image
   -> base64 images
 
 txt / md / json / csv
-  -> 본문 일부 추출
+  -> 후속 구현에서 본문 일부 추출
 
 pdf / docx / xlsx
   -> 파일명만 전달 또는 지원 예정 안내
 ```
+
+현재 구현 기준으로 모델에 실제 파일 내용을 전달하는 첨부 형식은 이미지뿐이다. 이미지 외 첨부 파일은 UI 선택, 드롭, 미리보기, 파일명 전달까지만 지원한다. 텍스트, PDF, 문서, 스프레드시트, 프레젠테이션의 본문 파싱과 요약 전달은 아직 구현되지 않았다.
 
 고급화 단계에서는 다음을 추가한다.
 
@@ -453,6 +455,11 @@ LocalStore
 ## Phase 6: 첨부 라우터
 
 * 현재 이미지 base64 변환을 `ImageHandler`로 이동
+* `TextHandler`: `txt`, `md`, `json`, `csv`, `tsv` 본문 일부 추출
+* `PdfHandler`: 텍스트 추출, 페이지별 chunk
+* `DocumentHandler`: `docx`, `hwp`, `hwpx`, `rtf` 구조 요약
+* `SpreadsheetHandler`: 시트명, 컬럼, 샘플 행, 간단 통계 요약
+* `PresentationHandler`: 슬라이드 제목과 주요 텍스트 요약
 * `TextHandler`로 txt/md/json/csv 일부 본문 전달
 * 이후 pdf/docx/xlsx handler 확장
 
