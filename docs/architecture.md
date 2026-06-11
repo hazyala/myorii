@@ -123,6 +123,8 @@ core/
 
 `core/`는 Qt를 import하지 않는 순수 Python 계층이다. UI는 Ollama를 직접 호출하지 않고 `ChatService`를 통해서만 모델 목록 조회와 채팅 스트리밍을 요청한다.
 
+LLM 요청 라우팅, 의도별 프롬프트, 모델 선택, 첨부 처리, 응답 포맷터의 확장 설계는 [router-design.md](router-design.md)에서 관리한다.
+
 ---
 
 ## Storage Layer
