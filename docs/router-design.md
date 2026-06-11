@@ -86,6 +86,8 @@ InstantRouter가 응답을 만들면 `ChatService`는 Ollama를 호출하지 않
 
 InstantRouter가 처리하지 못한 요청은 IntentRouter가 의도를 분류한다. 초기 버전은 LLM 분류가 아니라 키워드/정규식 기반 규칙 라우팅을 사용한다. 라우팅 자체에 LLM을 호출하면 실시간성이 떨어지기 때문이다.
 
+2차 구현에서는 `IntentRouter.route(request) -> IntentRoute` 계약을 추가한다. 이 단계는 아직 모델이나 프롬프트를 바꾸지 않고, 후속 `PromptProfileResolver`와 `ModelRouter`가 사용할 `intent`와 `reason`만 결정한다.
+
 ## 개발 네이밍 의도
 
 개발 편의를 위해 자주 쓰는 이름 추천 대상을 의도로 분리한다.

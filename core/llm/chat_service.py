@@ -5,7 +5,7 @@ from collections.abc import Iterator
 from core.llm.contracts import ChatAttachmentPayload, ChatMessagePayload, ChatRequest
 from core.llm.ollama_client import ModelNotFound, OllamaClient, OllamaNotRunning
 from core.llm.prompt_loader import load_prompt
-from core.llm.router import InstantRouter
+from core.llm.router import InstantRouter, IntentRouter
 
 
 DEFAULT_MODEL = "qwen3-vl:4b"
@@ -16,6 +16,7 @@ class ChatService:
         self._model = model
         self._client = client or OllamaClient()
         self._instant_router = InstantRouter()
+        self._intent_router = IntentRouter()
         self._messages: list[ChatMessagePayload] = []
 
     @property
@@ -66,6 +67,7 @@ class ChatService:
             yield instant_response.content
             return
 
+        route = self._intent_router.route(request)
         models = self._client.list_models()
         if self._model not in models:
             raise ModelNotFound(f"모델이 설치돼 있지 않아요: {self._model}")
@@ -77,4 +79,10 @@ class ChatService:
             yield token
 
         self._messages.append(user_message)
-        self._messages.append(ChatMessagePayload(role="assistant", content=assistant_text))
+        self._messages.append(
+            ChatMessagePayload(
+                role="assistant",
+                content=assistant_text,
+                metadata={"intent": route.intent, "route_reason": route.reason},
+            )
+        )
