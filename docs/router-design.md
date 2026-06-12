@@ -274,11 +274,14 @@ csv / tsv
 pdf
   -> PdfHandler가 일부 페이지 텍스트 추출
 
-docx / xlsx / pptx
+docx
+  -> DocumentHandler가 문단/표 텍스트 일부 추출
+
+xlsx / pptx
   -> 파일명만 전달 또는 지원 예정 안내
 ```
 
-현재 구현 기준으로 이미지는 Ollama `messages[].images`에 base64로 전달하고, 텍스트 계열, `csv`, `tsv`, `pdf` 첨부는 `AttachmentRouter`가 `AttachmentContext`로 변환해 user message 본문과 metadata에 추가한다. `AttachmentContext`는 읽은 범위와 지원 한계를 `제한`, `주의` 문구로 함께 전달해 사용자가 요청한 작업이 현재 첨부 파싱 범위를 넘을 때 모델이 이를 명확히 답하도록 한다. PDF는 일부 페이지 텍스트 추출만 지원하며 스캔/OCR/표 구조 분석은 지원하지 않는다. DOCX, XLSX, PPTX의 본문 파싱과 요약 전달은 아직 구현되지 않았다.
+현재 구현 기준으로 이미지는 Ollama `messages[].images`에 base64로 전달하고, 텍스트 계열, `csv`, `tsv`, `pdf`, `docx` 첨부는 `AttachmentRouter`가 `AttachmentContext`로 변환해 user message 본문과 metadata에 추가한다. `AttachmentContext`는 읽은 범위와 지원 한계를 `제한`, `주의` 문구로 함께 전달해 사용자가 요청한 작업이 현재 첨부 파싱 범위를 넘을 때 모델이 이를 명확히 답하도록 한다. PDF는 일부 페이지 텍스트 추출만 지원하며 스캔/OCR/표 구조 분석은 지원하지 않는다. DOCX는 문단/표 텍스트 일부만 지원하며 서식, 이미지, 주석, 변경 추적, 매크로는 분석하지 않는다. XLSX, PPTX의 본문 파싱과 요약 전달은 아직 구현되지 않았다.
 
 고급화 단계에서는 다음을 추가한다.
 
@@ -467,7 +470,7 @@ LocalStore
 * `CsvHandler`: `csv`, `tsv` 컬럼명과 샘플 행 요약
 * `ChatService`: 첨부 context를 user message 본문과 metadata에 추가
 * `PdfHandler`: 일부 페이지 텍스트 추출, 스캔/OCR/표 구조 분석 제외
-* `DocumentHandler`: `docx` 구조 요약
+* `DocumentHandler`: `docx` 문단/표 텍스트 일부 추출
 * `SpreadsheetHandler`: 시트명, 컬럼, 샘플 행, 간단 통계 요약
 * `PresentationHandler`: 슬라이드 제목과 주요 텍스트 요약
 * `TextHandler`로 txt/md/json/csv 일부 본문 전달
