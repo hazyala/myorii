@@ -25,6 +25,11 @@ class TextHandler:
         return AttachmentContext(
             title=f"[첨부 텍스트: {attachment.name}]",
             body=body,
+            limitations=(
+                "텍스트 첨부는 최대 일부 본문만 읽습니다.",
+                "큰 파일의 뒤쪽 내용은 포함되지 않을 수 있습니다.",
+            ),
+            warnings=("본문이 잘렸습니다.",) if truncated else (),
             metadata={
                 "handler": "TextHandler",
                 "mime_type": attachment.mime_type,

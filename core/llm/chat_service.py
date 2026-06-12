@@ -137,6 +137,8 @@ class ChatService:
                 "attachment_contexts": [
                     {
                         "title": context.title,
+                        "limitations": list(context.limitations),
+                        "warnings": list(context.warnings),
                         "metadata": context.metadata,
                     }
                     for context in contexts

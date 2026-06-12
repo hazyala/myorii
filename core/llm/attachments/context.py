@@ -8,9 +8,16 @@ from typing import Any
 class AttachmentContext:
     title: str
     body: str
+    limitations: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_prompt_section(self) -> str:
-        if not self.body:
-            return self.title
-        return f"{self.title}\n{self.body}"
+        lines = [self.title]
+        if self.limitations:
+            lines.append("제한: " + " ".join(self.limitations))
+        if self.warnings:
+            lines.append("주의: " + " ".join(self.warnings))
+        if self.body:
+            lines.append(self.body)
+        return "\n".join(lines)

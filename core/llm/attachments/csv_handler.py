@@ -32,6 +32,10 @@ class CsvHandler:
         return AttachmentContext(
             title=f"[첨부 표: {attachment.name}]",
             body=body,
+            limitations=(
+                "CSV/TSV 첨부는 컬럼명과 샘플 행만 읽습니다.",
+                "전체 행 분석, 정확한 통계 계산, 수식 검증은 지원하지 않습니다.",
+            ),
             metadata={
                 "handler": "CsvHandler",
                 "mime_type": attachment.mime_type,

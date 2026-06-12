@@ -275,7 +275,7 @@ pdf / docx / xlsx / pptx
   -> 파일명만 전달 또는 지원 예정 안내
 ```
 
-현재 구현 기준으로 이미지는 Ollama `messages[].images`에 base64로 전달하고, 텍스트 계열 및 `csv`, `tsv` 첨부는 `AttachmentRouter`가 `AttachmentContext`로 변환해 user message 본문과 metadata에 추가한다. PDF, DOCX, XLSX, PPTX의 본문 파싱과 요약 전달은 아직 구현되지 않았다.
+현재 구현 기준으로 이미지는 Ollama `messages[].images`에 base64로 전달하고, 텍스트 계열 및 `csv`, `tsv` 첨부는 `AttachmentRouter`가 `AttachmentContext`로 변환해 user message 본문과 metadata에 추가한다. `AttachmentContext`는 읽은 범위와 지원 한계를 `제한`, `주의` 문구로 함께 전달해 사용자가 요청한 작업이 현재 첨부 파싱 범위를 넘을 때 모델이 이를 명확히 답하도록 한다. PDF, DOCX, XLSX, PPTX의 본문 파싱과 요약 전달은 아직 구현되지 않았다.
 
 고급화 단계에서는 다음을 추가한다.
 
