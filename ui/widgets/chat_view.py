@@ -593,7 +593,6 @@ class ChatView(QWidget):
         return tuple(
             ChatAttachmentPayload.from_path(attachment.path)
             for attachment in self._attachments
-            if attachment.is_image
         )
 
     def _has_local_files(self, event: QDragEnterEvent | QDragMoveEvent | QDropEvent) -> bool:

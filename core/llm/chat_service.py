@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
+from core.llm.attachments import AttachmentContext, AttachmentRouter
 from core.llm.contracts import ChatAttachmentPayload, ChatMessagePayload, ChatRequest
 from core.llm.ollama_client import ModelNotFound, OllamaClient, OllamaNotRunning
 from core.llm.router import InstantRouter, IntentRouter, ModelRouter, PromptProfileResolver, ResponseFormatter
@@ -19,6 +20,7 @@ class ChatService:
         self._model_router = ModelRouter(vision_model=self._model)
         self._prompt_profile_resolver = PromptProfileResolver()
         self._response_formatter = ResponseFormatter()
+        self._attachment_router = AttachmentRouter()
         self._model_cache: list[str] | None = None
         self._messages: list[ChatMessagePayload] = []
 
@@ -47,6 +49,7 @@ class ChatService:
             return
 
         user_message = ChatMessagePayload(role="user", content=text, attachments=attachments)
+        user_message = self._with_attachment_context(user_message)
         request = ChatRequest(
             model=self._model,
             history=tuple(self._messages),
@@ -115,6 +118,36 @@ class ChatService:
                 },
             )
         )
+
+    def _with_attachment_context(self, message: ChatMessagePayload) -> ChatMessagePayload:
+        contexts = self._attachment_router.build_contexts(message.attachments)
+        if not contexts:
+            return message
+
+        context_text = self._format_attachment_contexts(contexts)
+        content = f"{message.content}\n\n{context_text}" if message.content else context_text
+        return ChatMessagePayload(
+            role=message.role,
+            content=content,
+            attachments=message.attachments,
+            sync=message.sync,
+            created_at=message.created_at,
+            metadata={
+                **message.metadata,
+                "attachment_contexts": [
+                    {
+                        "title": context.title,
+                        "metadata": context.metadata,
+                    }
+                    for context in contexts
+                ],
+            },
+        )
+
+    @staticmethod
+    def _format_attachment_contexts(contexts: tuple[AttachmentContext, ...]) -> str:
+        sections = "\n\n".join(context.to_prompt_section() for context in contexts)
+        return f"첨부 context:\n{sections}"
 
     def _list_models_cached(self) -> list[str]:
         if self._model_cache is not None:
