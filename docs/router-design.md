@@ -252,6 +252,7 @@ vision_model
 AttachmentRouter
   -> ImageHandler
   -> TextHandler
+  -> CsvHandler
   -> PdfHandler
   -> DocumentHandler
   -> SpreadsheetHandler
@@ -266,11 +267,14 @@ image
 txt / md / json / yaml / yml
   -> TextHandler가 본문 일부 추출
 
+csv / tsv
+  -> CsvHandler가 컬럼명과 샘플 행 요약
+
 pdf / docx / xlsx
   -> 파일명만 전달 또는 지원 예정 안내
 ```
 
-현재 구현 기준으로 모델에 실제 파일 내용을 전달하는 첨부 형식은 이미지뿐이다. `TextHandler`는 텍스트 계열 첨부 본문 일부를 `AttachmentContext`로 추출할 수 있지만 아직 `ChatService` 요청 경로에는 연결하지 않았다. 이미지 외 첨부 파일은 UI 선택, 드롭, 미리보기, 파일명 전달까지만 지원한다. PDF, 문서, 스프레드시트, 프레젠테이션의 본문 파싱과 요약 전달은 아직 구현되지 않았다.
+현재 구현 기준으로 모델에 실제 파일 내용을 전달하는 첨부 형식은 이미지뿐이다. `TextHandler`는 텍스트 계열 첨부 본문 일부를, `CsvHandler`는 `csv`, `tsv` 컬럼명과 샘플 행을 `AttachmentContext`로 추출할 수 있지만 아직 `ChatService` 요청 경로에는 연결하지 않았다. 이미지 외 첨부 파일은 UI 선택, 드롭, 미리보기, 파일명 전달까지만 지원한다. PDF, 문서, 스프레드시트, 프레젠테이션의 본문 파싱과 요약 전달은 아직 구현되지 않았다.
 
 고급화 단계에서는 다음을 추가한다.
 
@@ -456,6 +460,7 @@ LocalStore
 
 * 현재 이미지 base64 변환은 `ImageHandler`가 담당
 * `TextHandler`: `txt`, `md`, `json`, `yaml`, `yml` 본문 일부 추출
+* `CsvHandler`: `csv`, `tsv` 컬럼명과 샘플 행 요약
 * `PdfHandler`: 텍스트 추출, 페이지별 chunk
 * `DocumentHandler`: `docx`, `hwp`, `hwpx`, `rtf` 구조 요약
 * `SpreadsheetHandler`: 시트명, 컬럼, 샘플 행, 간단 통계 요약
