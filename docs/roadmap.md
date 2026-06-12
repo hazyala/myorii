@@ -51,7 +51,8 @@ Myorii는 메뉴바 및 시스템 트레이에 상주하며,
 * 복사 편의 응답 포맷터 구현
 * 라우터, 의도별 프롬프트, 모델 선택, 첨부 처리, 응답 포맷터 설계 문서화
 * 이미지 첨부 `ImageHandler`, 텍스트 첨부 `TextHandler`, CSV/TSV 첨부 `CsvHandler` 구현
-* 텍스트/CSV 첨부 context를 `ChatService` user message에 연결
+* PDF/DOCX/XLSX/PPTX 첨부 handler 구현
+* 텍스트/CSV/PDF/DOCX/XLSX/PPTX 첨부 context를 `ChatService` user message에 연결
 * Header `×` 닫기 버튼 구현
 * 채팅 입력 Enter/Shift+Enter 동작, 자동 줄바꿈, 채팅 영역 단독 스크롤 구현
 * PyInstaller frozen 실행에서 로컬 `platform/` 패키지와 표준 라이브러리 `platform.py` 충돌 보정
@@ -60,7 +61,7 @@ Myorii는 메뉴바 및 시스템 트레이에 상주하며,
 * 할일 탭 로컬 CRUD 시작점 구현
 * 할일 체크 완료 처리와 드래그 재정렬 구현
 * PyInstaller 번들에서 할일 카드 hitbox가 어긋나지 않도록 카드 opacity effect 제거
-* 다음 작업: 네이밍 전용 UI/UX 고도화, PDF/DOCX/XLSX/PPTX 첨부 handler 구현, 저장 세션과 SyncEngine 연결, Notion 연동 API 구현, 할일 편집/삭제 UI
+* 다음 작업: 네이밍 전용 UI/UX 고도화, 첨부 수동 테스트와 오류 수정, 저장 세션과 SyncEngine 연결, Notion 연동 API 구현, 할일 편집/삭제 UI
 
 ---
 
