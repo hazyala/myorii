@@ -261,7 +261,7 @@ AttachmentRouter
 
 ```text
 image
-  -> base64 images
+  -> ImageHandler가 base64 images 생성
 
 txt / md / json / csv
   -> 후속 구현에서 본문 일부 추출
@@ -454,7 +454,7 @@ LocalStore
 
 ## Phase 6: 첨부 라우터
 
-* 현재 이미지 base64 변환을 `ImageHandler`로 이동
+* 현재 이미지 base64 변환은 `ImageHandler`가 담당
 * `TextHandler`: `txt`, `md`, `json`, `csv`, `tsv` 본문 일부 추출
 * `PdfHandler`: 텍스트 추출, 페이지별 chunk
 * `DocumentHandler`: `docx`, `hwp`, `hwpx`, `rtf` 구조 요약

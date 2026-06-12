@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import base64
 from collections.abc import Iterator
-from pathlib import Path
 from typing import Any
 
 import ollama
 
+from core.llm.attachments import ImageHandler
 from core.llm.contracts import ChatMessagePayload
 
 
@@ -25,6 +24,7 @@ class ModelNotFound(OllamaError):
 class OllamaClient:
     def __init__(self, host: str | None = None) -> None:
         self._client = ollama.Client(host=host) if host else ollama.Client()
+        self._image_handler = ImageHandler()
 
     def is_available(self) -> bool:
         try:
@@ -77,7 +77,7 @@ class OllamaClient:
                 "content": message.content,
             }
             images = [
-                self._image_to_base64(Path(attachment.path))
+                self._image_handler.to_base64(attachment)
                 for attachment in message.attachments
                 if attachment.is_image
             ]
@@ -85,9 +85,3 @@ class OllamaClient:
                 ollama_message["images"] = images
             ollama_messages.append(ollama_message)
         return ollama_messages
-
-    def _image_to_base64(self, path: Path) -> str:
-        try:
-            return base64.b64encode(path.read_bytes()).decode("ascii")
-        except OSError as exc:
-            raise OllamaError(f"이미지 파일을 읽을 수 없어요: {path.name}") from exc
