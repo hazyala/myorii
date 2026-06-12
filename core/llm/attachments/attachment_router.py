@@ -4,6 +4,7 @@ from core.llm.attachments.context import AttachmentContext
 from core.llm.attachments.csv_handler import CsvHandler
 from core.llm.attachments.docx_handler import DocxHandler
 from core.llm.attachments.pdf_handler import PdfHandler
+from core.llm.attachments.pptx_handler import PptxHandler
 from core.llm.attachments.text_handler import TextHandler
 from core.llm.attachments.xlsx_handler import XlsxHandler
 from core.llm.contracts import ChatAttachmentPayload
@@ -18,11 +19,13 @@ class AttachmentRouter:
         csv_handler: CsvHandler | None = None,
         docx_handler: DocxHandler | None = None,
         pdf_handler: PdfHandler | None = None,
+        pptx_handler: PptxHandler | None = None,
         xlsx_handler: XlsxHandler | None = None,
     ) -> None:
         self._csv_handler = csv_handler or CsvHandler()
         self._docx_handler = docx_handler or DocxHandler()
         self._pdf_handler = pdf_handler or PdfHandler()
+        self._pptx_handler = pptx_handler or PptxHandler()
         self._text_handler = text_handler or TextHandler()
         self._xlsx_handler = xlsx_handler or XlsxHandler()
 
@@ -37,6 +40,8 @@ class AttachmentRouter:
                 contexts.append(self._docx_handler.extract(attachment))
             elif self._pdf_handler.supports(attachment):
                 contexts.append(self._pdf_handler.extract(attachment))
+            elif self._pptx_handler.supports(attachment):
+                contexts.append(self._pptx_handler.extract(attachment))
             elif self._xlsx_handler.supports(attachment):
                 contexts.append(self._xlsx_handler.extract(attachment))
             elif self._text_handler.supports(attachment):
