@@ -521,7 +521,7 @@ class ChatView(QWidget):
             self,
             "파일 첨부",
             str(Path.home()),
-            "지원 파일 (*.jpg *.jpeg *.png *.txt *.md *.csv *.json *.pdf *.doc *.docx *.hwp *.hwpx *.xls *.xlsx *.ppt *.pptx);;모든 파일 (*)",
+            "지원 파일 (*.jpg *.jpeg *.png *.txt *.md *.csv *.tsv *.json *.yaml *.yml *.pdf *.doc *.docx *.hwp *.hwpx *.xls *.xlsx *.ppt *.pptx);;모든 파일 (*)",
         )
         self._add_attachment_paths(paths)
 
