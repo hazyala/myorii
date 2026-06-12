@@ -7,6 +7,7 @@ from core.llm.attachments.docx_handler import DocxHandler
 from core.llm.attachments.image_handler import ImageHandler
 from core.llm.attachments.pdf_handler import PdfHandler
 from core.llm.attachments.text_handler import TextHandler
+from core.llm.attachments.xlsx_handler import XlsxHandler
 
 __all__ = [
     "AttachmentContext",
@@ -16,4 +17,5 @@ __all__ = [
     "ImageHandler",
     "PdfHandler",
     "TextHandler",
+    "XlsxHandler",
 ]
