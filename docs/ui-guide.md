@@ -234,9 +234,9 @@ Myorii 아이콘 사용
 * 긴 텍스트 자동 줄바꿈
 * 입력 내용이 여러 줄이 되면 입력창 높이 제한 내에서 확장
 
-첨부 파일은 `jpg`, `jpeg`, `png`, `txt`, `md`, `csv`, `tsv`, `json`, `yaml`, `yml`, `pdf`, `doc`, `docx`, `hwp`, `hwpx`, `xls`, `xlsx`, `ppt`, `pptx` 등 확장자 기반으로 선택, 드롭, 미리보기를 지원한다. 지원하지 않는 파일을 선택하거나 드롭하면 Assistant 메시지 영역에 지원하지 않는 파일 형식 오류를 표시한다.
+첨부 파일은 `jpg`, `jpeg`, `png`, `gif`, `bmp`, `txt`, `md`, `csv`, `tsv`, `json`, `yaml`, `yml`, `pdf`, `docx`, `xlsx`, `pptx` 확장자 기반으로 선택, 드롭, 미리보기를 지원한다. 지원하지 않는 파일을 선택하거나 드롭하면 Assistant 메시지 영역에 지원하지 않는 파일 형식 오류를 표시한다.
 
-현재 모델 입력까지 실제 내용을 전달하는 첨부 형식은 이미지, 텍스트 계열, CSV/TSV 파일이다. 이미지는 vision 모델 요청의 이미지 payload로 전달하고, `TextHandler`와 `CsvHandler`가 만든 context는 user message 본문과 metadata에 추가한다. PDF, 문서, 스프레드시트, 프레젠테이션은 UI 첨부와 파일명 전달까지만 구현되어 있으며, 본문 파싱과 요약 전달은 후속 `AttachmentRouter` 단계에서 구현한다.
+현재 모델 입력까지 실제 내용을 전달하는 첨부 형식은 이미지, 텍스트 계열, CSV/TSV 파일이다. 이미지는 vision 모델 요청의 이미지 payload로 전달하고, `TextHandler`와 `CsvHandler`가 만든 context는 user message 본문과 metadata에 추가한다. PDF, DOCX, XLSX, PPTX는 UI 첨부와 파일명 전달까지만 구현되어 있으며, 본문 파싱과 요약 전달은 후속 `AttachmentRouter` 단계에서 구현한다.
 
 첨부 파일 미리보기 카드는 입력창 바로 위에 표시한다. 이미지 파일은 썸네일을 보여주고, 문서 파일은 확장자 배지를 보여준다. 파일명이 길 경우 카드 폭에 맞춰 끝부분을 말줄임 처리한다.
 

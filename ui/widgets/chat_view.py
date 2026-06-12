@@ -41,24 +41,17 @@ from ui.widgets.switch_button import SwitchButton
 SUPPORTED_ATTACHMENT_EXTENSIONS = {
     ".bmp",
     ".csv",
-    ".doc",
     ".docx",
     ".gif",
-    ".hwp",
-    ".hwpx",
     ".jpeg",
     ".jpg",
     ".json",
     ".md",
     ".pdf",
     ".png",
-    ".ppt",
     ".pptx",
-    ".py",
-    ".rtf",
     ".tsv",
     ".txt",
-    ".xls",
     ".xlsx",
     ".yaml",
     ".yml",
@@ -521,7 +514,7 @@ class ChatView(QWidget):
             self,
             "파일 첨부",
             str(Path.home()),
-            "지원 파일 (*.jpg *.jpeg *.png *.txt *.md *.csv *.tsv *.json *.yaml *.yml *.pdf *.doc *.docx *.hwp *.hwpx *.xls *.xlsx *.ppt *.pptx);;모든 파일 (*)",
+            "지원 파일 (*.jpg *.jpeg *.png *.gif *.bmp *.txt *.md *.csv *.tsv *.json *.yaml *.yml *.pdf *.docx *.xlsx *.pptx);;모든 파일 (*)",
         )
         self._add_attachment_paths(paths)
 

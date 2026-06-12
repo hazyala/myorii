@@ -120,10 +120,10 @@ def _attachment_kind(suffix: str, mime_type: str) -> AttachmentKind:
         return AttachmentKind.IMAGE
     if mime_type.startswith("text/") or suffix in {".md", ".json", ".yaml", ".yml", ".csv", ".tsv"}:
         return AttachmentKind.TEXT
-    if suffix in {".xls", ".xlsx"}:
+    if suffix == ".xlsx":
         return AttachmentKind.SPREADSHEET
-    if suffix in {".ppt", ".pptx"}:
+    if suffix == ".pptx":
         return AttachmentKind.PRESENTATION
-    if suffix in {".doc", ".docx", ".hwp", ".hwpx", ".pdf", ".rtf"}:
+    if suffix in {".docx", ".pdf"}:
         return AttachmentKind.DOCUMENT
     return AttachmentKind.OTHER

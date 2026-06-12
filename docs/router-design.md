@@ -256,6 +256,7 @@ AttachmentRouter
   -> PdfHandler
   -> DocumentHandler
   -> SpreadsheetHandler
+  -> PresentationHandler
 ```
 
 초기 단계는 아래처럼 제한한다.
@@ -270,11 +271,11 @@ txt / md / json / yaml / yml
 csv / tsv
   -> CsvHandler가 컬럼명과 샘플 행 요약
 
-pdf / docx / xlsx
+pdf / docx / xlsx / pptx
   -> 파일명만 전달 또는 지원 예정 안내
 ```
 
-현재 구현 기준으로 이미지는 Ollama `messages[].images`에 base64로 전달하고, 텍스트 계열 및 `csv`, `tsv` 첨부는 `AttachmentRouter`가 `AttachmentContext`로 변환해 user message 본문과 metadata에 추가한다. PDF, 문서, 스프레드시트, 프레젠테이션의 본문 파싱과 요약 전달은 아직 구현되지 않았다.
+현재 구현 기준으로 이미지는 Ollama `messages[].images`에 base64로 전달하고, 텍스트 계열 및 `csv`, `tsv` 첨부는 `AttachmentRouter`가 `AttachmentContext`로 변환해 user message 본문과 metadata에 추가한다. PDF, DOCX, XLSX, PPTX의 본문 파싱과 요약 전달은 아직 구현되지 않았다.
 
 고급화 단계에서는 다음을 추가한다.
 
@@ -463,11 +464,11 @@ LocalStore
 * `CsvHandler`: `csv`, `tsv` 컬럼명과 샘플 행 요약
 * `ChatService`: 첨부 context를 user message 본문과 metadata에 추가
 * `PdfHandler`: 텍스트 추출, 페이지별 chunk
-* `DocumentHandler`: `docx`, `hwp`, `hwpx`, `rtf` 구조 요약
+* `DocumentHandler`: `docx` 구조 요약
 * `SpreadsheetHandler`: 시트명, 컬럼, 샘플 행, 간단 통계 요약
 * `PresentationHandler`: 슬라이드 제목과 주요 텍스트 요약
 * `TextHandler`로 txt/md/json/csv 일부 본문 전달
-* 이후 pdf/docx/xlsx handler 확장
+* 이후 pdf/docx/xlsx/pptx handler 확장
 
 ## Phase 7: 저장 세션
 
