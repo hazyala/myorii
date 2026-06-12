@@ -252,25 +252,39 @@ vision_model
 AttachmentRouter
   -> ImageHandler
   -> TextHandler
+  -> CsvHandler
   -> PdfHandler
   -> DocumentHandler
   -> SpreadsheetHandler
+  -> PresentationHandler
 ```
 
 초기 단계는 아래처럼 제한한다.
 
 ```text
 image
-  -> base64 images
+  -> ImageHandler가 base64 images 생성
 
-txt / md / json / csv
-  -> 후속 구현에서 본문 일부 추출
+txt / md / json / yaml / yml
+  -> TextHandler가 본문 일부 추출
 
-pdf / docx / xlsx
-  -> 파일명만 전달 또는 지원 예정 안내
+csv / tsv
+  -> CsvHandler가 컬럼명과 샘플 행 요약
+
+pdf
+  -> PdfHandler가 일부 페이지 텍스트 추출
+
+docx
+  -> DocumentHandler가 문단/표 텍스트 일부 추출
+
+xlsx
+  -> SpreadsheetHandler가 시트명, 컬럼명, 샘플 행 요약
+
+pptx
+  -> PresentationHandler가 슬라이드별 텍스트 요약
 ```
 
-현재 구현 기준으로 모델에 실제 파일 내용을 전달하는 첨부 형식은 이미지뿐이다. 이미지 외 첨부 파일은 UI 선택, 드롭, 미리보기, 파일명 전달까지만 지원한다. 텍스트, PDF, 문서, 스프레드시트, 프레젠테이션의 본문 파싱과 요약 전달은 아직 구현되지 않았다.
+현재 구현 기준으로 이미지는 Ollama `messages[].images`에 base64로 전달하고, 텍스트 계열, `csv`, `tsv`, `pdf`, `docx`, `xlsx`, `pptx` 첨부는 `AttachmentRouter`가 `AttachmentContext`로 변환해 user message 본문과 metadata에 추가한다. `AttachmentContext`는 읽은 범위와 지원 한계를 `제한`, `주의` 문구로 함께 전달해 사용자가 요청한 작업이 현재 첨부 파싱 범위를 넘을 때 모델이 이를 명확히 답하도록 한다. PDF는 일부 페이지 텍스트 추출만 지원하며 스캔/OCR/표 구조 분석은 지원하지 않는다. DOCX는 문단/표 텍스트 일부만 지원하며 서식, 이미지, 주석, 변경 추적, 매크로는 분석하지 않는다. XLSX는 시트명, 컬럼명, 샘플 행만 지원하며 전체 행 분석, 수식 재계산, 피벗/차트/서식 분석은 지원하지 않는다. PPTX는 슬라이드별 텍스트만 지원하며 PPT 제작, 디자인 생성, 이미지/차트/표 구조 분석, 발표자 노트, 수치 계산은 지원하지 않는다.
 
 고급화 단계에서는 다음을 추가한다.
 
@@ -454,14 +468,16 @@ LocalStore
 
 ## Phase 6: 첨부 라우터
 
-* 현재 이미지 base64 변환을 `ImageHandler`로 이동
-* `TextHandler`: `txt`, `md`, `json`, `csv`, `tsv` 본문 일부 추출
-* `PdfHandler`: 텍스트 추출, 페이지별 chunk
-* `DocumentHandler`: `docx`, `hwp`, `hwpx`, `rtf` 구조 요약
-* `SpreadsheetHandler`: 시트명, 컬럼, 샘플 행, 간단 통계 요약
-* `PresentationHandler`: 슬라이드 제목과 주요 텍스트 요약
+* 현재 이미지 base64 변환은 `ImageHandler`가 담당
+* `TextHandler`: `txt`, `md`, `json`, `yaml`, `yml` 본문 일부 추출
+* `CsvHandler`: `csv`, `tsv` 컬럼명과 샘플 행 요약
+* `ChatService`: 첨부 context를 user message 본문과 metadata에 추가
+* `PdfHandler`: 일부 페이지 텍스트 추출, 스캔/OCR/표 구조 분석 제외
+* `DocumentHandler`: `docx` 문단/표 텍스트 일부 추출
+* `SpreadsheetHandler`: 시트명, 컬럼명, 샘플 행 요약
+* `PresentationHandler`: 슬라이드별 텍스트 요약, 디자인/이미지/차트/표 구조/발표자 노트/수치 계산 제외
 * `TextHandler`로 txt/md/json/csv 일부 본문 전달
-* 이후 pdf/docx/xlsx handler 확장
+* 이후 pdf/docx/xlsx/pptx handler 확장
 
 ## Phase 7: 저장 세션
 
