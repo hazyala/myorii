@@ -39,8 +39,8 @@
 | ATTACH-EDGE-008 | `edge_cases/empty.docx` | DocxHandler | 성공 | 첨부한 DOCX 문서 내용을 요약해줘. | 추출 가능한 문서 텍스트가 없음을 안전하게 안내 |
 | ATTACH-EDGE-009 | `edge_cases/empty_sheet.xlsx` | XlsxHandler | 이슈 발견 | 첨부한 XLSX 파일의 시트 내용을 요약해줘. | 정상 XLSX와 동일하게 "XLSX 파일을 읽을 수 없어요" 오류 발생. `ATTACH-FIX-006` 경로 파싱 이슈 범위 |
 | ATTACH-EDGE-010 | `edge_cases/empty.pptx` | PptxHandler | 성공 | 첨부한 PPTX 파일의 슬라이드 내용을 요약해줘. | 전체 슬라이드 1개와 텍스트 없음 상태를 안전하게 안내 |
-| ATTACH-EDGE-011 | `edge_cases/unsupported.exe` | Unsupported | 이슈 발견 | 첨부한 파일 내용을 확인해줘. | 파일을 정확히 드롭하지 않았는데 드래그 중 미지원 형식 오류 채팅이 20회 이상 반복 생성됨 |
-| ATTACH-EDGE-012 | `edge_cases/unsupported.zip` | Unsupported | 이슈 발견 | 첨부한 파일 내용을 확인해줘. | `unsupported.exe`와 동일하게 드래그 중 미지원 형식 오류 채팅이 반복 생성됨 |
+| ATTACH-EDGE-011 | `edge_cases/unsupported.exe` | Unsupported | 성공 | 첨부한 파일 내용을 확인해줘. | 드래그 중에는 오류 메시지를 만들지 않고, 드롭 완료 시점에 미지원 형식 오류를 1회만 표시함 |
+| ATTACH-EDGE-012 | `edge_cases/unsupported.zip` | Unsupported | 성공 | 첨부한 파일 내용을 확인해줘. | 드래그 중에는 오류 메시지를 만들지 않고, 드롭 완료 시점에 미지원 형식 오류를 1회만 표시함 |
 
 ## 향후 기능 테스트 작성 규칙
 

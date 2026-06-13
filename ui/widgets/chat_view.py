@@ -7,11 +7,13 @@ from PyQt6.QtCore import QEasingCurve, QEvent, QMimeData, QPropertyAnimation, QS
 from PyQt6.QtGui import (
     QColor,
     QDragEnterEvent,
+    QDragLeaveEvent,
     QDragMoveEvent,
     QDropEvent,
     QFontMetrics,
     QIcon,
     QKeyEvent,
+    QMouseEvent,
     QPainter,
     QPen,
     QPixmap,
@@ -56,6 +58,8 @@ SUPPORTED_ATTACHMENT_EXTENSIONS = {
     ".yaml",
     ".yml",
 }
+DRAG_AUTOSCROLL_MARGIN = 56
+DRAG_AUTOSCROLL_MAX_STEP = 18
 
 
 @dataclass(frozen=True)
@@ -197,13 +201,17 @@ class ChatInput(QTextEdit):
 
     def eventFilter(self, watched, event: QEvent) -> bool:  # noqa: N802
         if watched is self.viewport():
-            if isinstance(event, QDropEvent):
+            if event.type() == QEvent.Type.Drop and isinstance(event, QDropEvent):
                 files = self._local_files_from_event(event)
                 if files:
                     self.files_dropped.emit(files)
                     event.acceptProposedAction()
                     return True
-            if isinstance(event, (QDragEnterEvent, QDragMoveEvent)) and self._has_local_files(event):
+            if (
+                event.type() in (QEvent.Type.DragEnter, QEvent.Type.DragMove)
+                and isinstance(event, (QDragEnterEvent, QDragMoveEvent))
+                and self._has_local_files(event)
+            ):
                 event.acceptProposedAction()
                 return True
 
@@ -262,6 +270,10 @@ class ChatView(QWidget):
         self._toast_animation.setEndValue(0.0)
         self._toast_animation.setEasingCurve(QEasingCurve.Type.InOutQuad)
         self._toast_animation.finished.connect(self._toast.hide)
+        self._drag_autoscroll_delta = 0
+        self._drag_autoscroll_timer = QTimer(self)
+        self._drag_autoscroll_timer.setInterval(24)
+        self._drag_autoscroll_timer.timeout.connect(self._apply_drag_autoscroll)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -286,6 +298,10 @@ class ChatView(QWidget):
 
         content = QWidget()
         content.setObjectName("chatScrollContent")
+        content.setAcceptDrops(True)
+        content.installEventFilter(self)
+        self._scroll_area.viewport().setAcceptDrops(True)
+        self._scroll_area.viewport().installEventFilter(self)
         self._message_layout = QVBoxLayout(content)
         self._message_layout.setContentsMargins(0, 0, 0, 0)
         self._message_layout.setSpacing(10)
@@ -412,6 +428,7 @@ class ChatView(QWidget):
         bubble.code_copied.connect(self._show_copy_toast)
         insert_index = max(0, self._message_layout.count() - 1)
         self._message_layout.insertWidget(insert_index, bubble)
+        self._register_pointer_autoscroll_widget(bubble)
         self._scroll_to_bottom()
         return bubble
 
@@ -427,6 +444,7 @@ class ChatView(QWidget):
         if self._assistant_bubble is not None:
             self._assistant_bubble.hide_loading_indicator()
             self._assistant_bubble.render_markdown()
+            self._register_pointer_autoscroll_widget(self._assistant_bubble)
         self._assistant_bubble = None
         self._set_input_enabled(True)
         self._scroll_to_bottom()
@@ -489,24 +507,81 @@ class ChatView(QWidget):
                 widget.update_available_width(width)
         self._position_toast()
 
+    def eventFilter(self, watched, event: QEvent) -> bool:  # noqa: N802
+        if self._handles_drag_autoscroll(watched):
+            if event.type() == QEvent.Type.Drop and isinstance(event, QDropEvent):
+                self._stop_drag_autoscroll()
+                files = self._local_files_from_event(event)
+                if files:
+                    self._add_attachment_paths(files)
+                    event.acceptProposedAction()
+                    return True
+            if (
+                event.type() == QEvent.Type.DragMove
+                and isinstance(event, QDragMoveEvent)
+                and self._has_local_files(event)
+            ):
+                event.acceptProposedAction()
+                self._update_drag_autoscroll(watched.mapToGlobal(event.position().toPoint()))
+                return True
+            if (
+                event.type() == QEvent.Type.DragEnter
+                and isinstance(event, QDragEnterEvent)
+                and self._has_local_files(event)
+            ):
+                event.acceptProposedAction()
+                self._update_drag_autoscroll(watched.mapToGlobal(event.position().toPoint()))
+                return True
+            if event.type() == QEvent.Type.DragLeave:
+                self._stop_drag_autoscroll()
+
+        if self._handles_pointer_autoscroll(watched):
+            if (
+                event.type() == QEvent.Type.MouseMove
+                and isinstance(event, QMouseEvent)
+                and event.buttons() & Qt.MouseButton.LeftButton
+            ):
+                self._update_drag_autoscroll(watched.mapToGlobal(event.position().toPoint()))
+            elif event.type() in (QEvent.Type.MouseButtonRelease, QEvent.Type.Leave):
+                self._stop_drag_autoscroll()
+
+        return super().eventFilter(watched, event)
+
+    def _handles_drag_autoscroll(self, watched) -> bool:
+        return (
+            watched in (self._scroll_area.viewport(), self._scroll_area.widget())
+            or bool(watched.property("chatDragAutoscroll"))
+        )
+
+    def _handles_pointer_autoscroll(self, watched) -> bool:
+        return bool(watched.property("chatPointerAutoscroll"))
+
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:  # noqa: N802
         if self._has_local_files(event):
             event.acceptProposedAction()
+            self._update_drag_autoscroll(self.mapToGlobal(event.position().toPoint()))
             return
         super().dragEnterEvent(event)
 
     def dragMoveEvent(self, event: QDragMoveEvent) -> None:  # noqa: N802
         if self._has_local_files(event):
             event.acceptProposedAction()
+            self._update_drag_autoscroll(self.mapToGlobal(event.position().toPoint()))
             return
         super().dragMoveEvent(event)
+
+    def dragLeaveEvent(self, event: QDragLeaveEvent) -> None:  # noqa: N802
+        self._stop_drag_autoscroll()
+        super().dragLeaveEvent(event)
 
     def dropEvent(self, event: QDropEvent) -> None:  # noqa: N802
         files = self._local_files_from_event(event)
         if files:
+            self._stop_drag_autoscroll()
             self._add_attachment_paths(files)
             event.acceptProposedAction()
             return
+        self._stop_drag_autoscroll()
         super().dropEvent(event)
 
     def _select_attachments(self) -> None:
@@ -596,3 +671,58 @@ class ChatView(QWidget):
         if not mime_data.hasUrls():
             return []
         return [url.toLocalFile() for url in mime_data.urls() if url.isLocalFile()]
+
+    def _register_pointer_autoscroll_widget(self, widget: QWidget) -> None:
+        candidates = [widget, *widget.findChildren(QWidget)]
+        for candidate in candidates:
+            if not candidate.property("chatPointerAutoscroll"):
+                candidate.setProperty("chatPointerAutoscroll", True)
+                candidate.installEventFilter(self)
+            viewport = getattr(candidate, "viewport", None)
+            if callable(viewport):
+                child_viewport = viewport()
+                if child_viewport is not None:
+                    if not child_viewport.property("chatPointerAutoscroll"):
+                        child_viewport.setProperty("chatPointerAutoscroll", True)
+                        child_viewport.installEventFilter(self)
+
+    def _update_drag_autoscroll(self, global_pos) -> None:
+        viewport = self._scroll_area.viewport()
+        local_y = viewport.mapFromGlobal(global_pos).y()
+        height = viewport.height()
+        if height <= 0:
+            self._stop_drag_autoscroll()
+            return
+
+        if local_y < DRAG_AUTOSCROLL_MARGIN:
+            ratio = (DRAG_AUTOSCROLL_MARGIN - max(0, local_y)) / DRAG_AUTOSCROLL_MARGIN
+            self._drag_autoscroll_delta = -max(1, int(DRAG_AUTOSCROLL_MAX_STEP * ratio))
+        elif local_y > height - DRAG_AUTOSCROLL_MARGIN:
+            ratio = (local_y - (height - DRAG_AUTOSCROLL_MARGIN)) / DRAG_AUTOSCROLL_MARGIN
+            self._drag_autoscroll_delta = max(1, int(DRAG_AUTOSCROLL_MAX_STEP * min(1.0, ratio)))
+        else:
+            self._stop_drag_autoscroll()
+            return
+
+        if not self._drag_autoscroll_timer.isActive():
+            self._drag_autoscroll_timer.start()
+
+    def _apply_drag_autoscroll(self) -> None:
+        if self._drag_autoscroll_delta == 0:
+            self._stop_drag_autoscroll()
+            return
+
+        scrollbar = self._scroll_area.verticalScrollBar()
+        next_value = max(
+            scrollbar.minimum(),
+            min(scrollbar.maximum(), scrollbar.value() + self._drag_autoscroll_delta),
+        )
+        if next_value == scrollbar.value():
+            self._stop_drag_autoscroll()
+            return
+        scrollbar.setValue(next_value)
+
+    def _stop_drag_autoscroll(self) -> None:
+        self._drag_autoscroll_delta = 0
+        if self._drag_autoscroll_timer.isActive():
+            self._drag_autoscroll_timer.stop()
