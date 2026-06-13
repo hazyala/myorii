@@ -446,11 +446,14 @@ class ChatView(QWidget):
         self._assistant_bubble.append_token(token)
         self._scroll_to_bottom()
 
-    def _finish_response(self) -> None:
+    def _finish_response(self, final_text: str = "") -> None:
         if self._assistant_bubble is not None:
             self._assistant_bubble.hide_loading_indicator()
             if not self._assistant_has_content:
-                self._assistant_bubble.set_text("응답을 생성하지 못했습니다. 다시 시도해주세요.")
+                if final_text.strip():
+                    self._assistant_bubble.set_text(final_text)
+                else:
+                    self._assistant_bubble.set_text("응답을 생성하지 못했습니다. 다시 시도해주세요.")
             self._assistant_bubble.render_markdown()
             self._register_pointer_autoscroll_widget(self._assistant_bubble)
         self._assistant_bubble = None

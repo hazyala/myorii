@@ -9,7 +9,8 @@ class ResponseFormatter:
     """Normalizes copy-friendly responses for format-sensitive intents."""
 
     _BUFFERED_INTENT_PREFIXES = ("naming_",)
-    _BUFFERED_INTENTS = {"command", "commit_message", "image_code_transcription"}
+    _ATTACHMENT_INTENTS = {"document_question", "spreadsheet_question", "image_question"}
+    _BUFFERED_INTENTS = {"command", "commit_message", "image_code_transcription", *_ATTACHMENT_INTENTS}
 
     def should_buffer(self, intent: str) -> bool:
         return intent in self._BUFFERED_INTENTS or intent.startswith(self._BUFFERED_INTENT_PREFIXES)
@@ -27,7 +28,14 @@ class ResponseFormatter:
             return self._format_command(cleaned)
         if intent == "image_code_transcription":
             return self._format_single_snippet(cleaned)
+        if intent in self._ATTACHMENT_INTENTS:
+            return self._format_attachment_response(cleaned)
         return cleaned
+
+    def _format_attachment_response(self, text: str) -> str:
+        without_code_fences = self._unwrap_nontechnical_code_fences(text)
+        without_full_repeat = self._remove_full_repeat(without_code_fences)
+        return self._remove_adjacent_repeated_paragraphs(without_full_repeat)
 
     def _format_code_candidates(self, text: str, request: ChatRequest, language: str) -> str:
         candidates = self._extract_candidate_blocks(text)
@@ -119,6 +127,45 @@ class ResponseFormatter:
         return any("\n" in code for _language, code in self._extract_code_blocks(text))
 
     @staticmethod
+    def _unwrap_nontechnical_code_fences(text: str) -> str:
+        def replace(match: re.Match[str]) -> str:
+            language = match.group(1).strip().lower()
+            code = match.group(2).strip("\n")
+            if _looks_like_code_or_command(code):
+                return match.group(0)
+            if language in _CODE_FENCE_LANGUAGES:
+                return match.group(0)
+            return code
+
+        return re.sub(r"```([a-zA-Z0-9_-]*)\n(.*?)```", replace, text, flags=re.DOTALL)
+
+    @staticmethod
+    def _remove_full_repeat(text: str) -> str:
+        lines = text.splitlines()
+        for split in range(1, len(lines)):
+            left = [line.strip() for line in lines[:split] if line.strip()]
+            right = [line.strip() for line in lines[split:] if line.strip()]
+            if left and left == right:
+                return "\n".join(lines[:split]).strip()
+        return text
+
+    @staticmethod
+    def _remove_adjacent_repeated_paragraphs(text: str) -> str:
+        paragraphs = [paragraph for paragraph in re.split(r"\n{2,}", text.strip()) if paragraph.strip()]
+        if len(paragraphs) <= 1:
+            return text.strip()
+
+        result: list[str] = []
+        previous = ""
+        for paragraph in paragraphs:
+            normalized = re.sub(r"\s+", " ", paragraph).strip()
+            if normalized == previous:
+                continue
+            result.append(paragraph.strip())
+            previous = normalized
+        return "\n\n".join(result)
+
+    @staticmethod
     def _requested_count(text: str) -> int | None:
         match = re.search(r"(\d+)\s*개", text)
         if not match:
@@ -192,6 +239,52 @@ def _is_shell_command(text: str) -> bool:
         "ollama ",
     )
     return text.startswith(command_prefixes)
+
+
+def _looks_like_code_or_command(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return False
+
+    lines = [line.strip() for line in stripped.splitlines() if line.strip()]
+    if any(_is_shell_command(line) for line in lines):
+        return True
+    if any(re.match(r"^(async\s+def|def|class|function|import|from)\b", line) for line in lines):
+        return True
+    if any(re.search(r"[{};]|=>|</?\w+|=\s*[^=]", line) for line in lines):
+        return True
+    return False
+
+
+_CODE_FENCE_LANGUAGES = {
+    "bash",
+    "c",
+    "cpp",
+    "css",
+    "go",
+    "html",
+    "java",
+    "javascript",
+    "js",
+    "jsx",
+    "kotlin",
+    "kt",
+    "php",
+    "python",
+    "py",
+    "rb",
+    "rs",
+    "rust",
+    "scss",
+    "sh",
+    "shell",
+    "sql",
+    "swift",
+    "tsx",
+    "typescript",
+    "ts",
+    "zsh",
+}
 
 
 def _is_comment_line(text: str) -> bool:

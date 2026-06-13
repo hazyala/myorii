@@ -594,7 +594,18 @@ class MessageBubble(QWidget):
                 segments.append(("code", code))
             position = match.end()
         self._append_inline_segments(segments, self._text[position:])
-        return segments
+        return self._merge_adjacent_text_segments(segments)
+
+    @staticmethod
+    def _merge_adjacent_text_segments(segments: list[tuple[str, str]]) -> list[tuple[str, str]]:
+        merged: list[tuple[str, str]] = []
+        for kind, text in segments:
+            if kind == "text" and merged and merged[-1][0] == "text":
+                previous_kind, previous_text = merged[-1]
+                merged[-1] = (previous_kind, previous_text + text)
+                continue
+            merged.append((kind, text))
+        return merged
 
     def _split_code_units(self, code: str) -> list[str]:
         lines = code.splitlines()
@@ -645,7 +656,7 @@ class MessageBubble(QWidget):
             plain = text[position : match.start()]
             if plain:
                 segments.append(("text", plain))
-            segments.append(("code", match.group(1)))
+            segments.append(("text", f"`{match.group(1)}`"))
             position = match.end()
         rest = text[position:]
         if rest:
@@ -713,11 +724,10 @@ class MessageBubble(QWidget):
         filename = r"[\w.-]+\.(?:py|js|jsx|ts|tsx|java|kt|swift|go|rs|rb|php|css|scss|html|xml|json|ya?ml|md|txt|sh|sql)"
         command = r"(?:git|npm|yarn|pnpm|node|python3?|pip|uv|brew|ollama|docker|kubectl|curl|ssh|cd|ls|mkdir|cp|mv|rm|chmod)\b"
         function = r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\([^()\n]*\)(?:\s*->\s*[\w\[\]., |]+)?"
-        identifier = r"(?:[A-Z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*|[a-z]+(?:_[a-z0-9]+)+|[a-z]+[A-Z][A-Za-z0-9]*|[A-Z_][A-Z0-9_]{2,})"
         path = r"(?:\.{1,2}/|~/|/)[^\s]+"
         return any(
             re.fullmatch(pattern, candidate)
-            for pattern in (filename, command + r".*", function + r"\s*:?", identifier, path)
+            for pattern in (filename, command + r".*", function + r"\s*:?", path)
         )
 
     def _clean_technical_line(self, line: str) -> str:

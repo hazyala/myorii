@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 from core.llm.contracts import AttachmentKind, ChatRequest
 
@@ -79,9 +80,15 @@ class IntentRouter:
                 return IntentRoute(intent="image_code_transcription", reason="image_code_keyword")
             return IntentRoute(intent="image_question", reason="image_attachment")
 
-        if any(attachment.kind == AttachmentKind.SPREADSHEET for attachment in attachments):
+        if any(
+            attachment.kind == AttachmentKind.SPREADSHEET or _attachment_suffix(attachment.path) in {".csv", ".tsv"}
+            for attachment in attachments
+        ):
             return IntentRoute(intent="spreadsheet_question", reason="spreadsheet_attachment")
-        if any(attachment.kind == AttachmentKind.DOCUMENT for attachment in attachments):
+        if any(
+            attachment.kind in {AttachmentKind.DOCUMENT, AttachmentKind.PRESENTATION, AttachmentKind.TEXT}
+            for attachment in attachments
+        ):
             return IntentRoute(intent="document_question", reason="document_attachment")
 
         return None
@@ -108,3 +115,7 @@ class IntentRouter:
 
 def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text.strip().lower())
+
+
+def _attachment_suffix(path: str) -> str:
+    return Path(path).suffix.lower()
