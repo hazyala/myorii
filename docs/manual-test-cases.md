@@ -29,18 +29,18 @@
 
 | ID | 파일 | Handler | 테스트 상태 | 테스트 프롬프트 | 확인 내용 |
 | --- | --- | --- | --- | --- | --- |
-| ATTACH-EDGE-001 | `edge_cases/empty.txt` | TextHandler | 미실행 | 첨부한 텍스트 파일 내용을 요약해줘. | 빈 파일임을 안전하게 안내하거나 빈 context로 처리 |
-| ATTACH-EDGE-002 | `edge_cases/large_context_limit.txt` | TextHandler | 미실행 | 첨부한 큰 텍스트 파일의 앞부분 기준으로 핵심 내용을 요약해줘. | context 길이 제한, 일부 추출, 제한 안내 확인 |
-| ATTACH-EDGE-003 | `edge_cases/malformed.json` | TextHandler | 미실행 | 첨부한 JSON 파일을 읽고 주요 내용을 요약해줘. | JSON 파싱 실패를 안전하게 처리하고 오류 안내 |
-| ATTACH-EDGE-004 | `edge_cases/invalid.yaml` | TextHandler | 미실행 | 첨부한 YAML 파일을 읽고 주요 내용을 요약해줘. | YAML 파싱 실패를 안전하게 처리하고 오류 안내 |
-| ATTACH-EDGE-005 | `edge_cases/empty_rows.csv` | CsvHandler | 미실행 | 첨부한 CSV 파일의 컬럼명과 데이터 행을 요약해줘. | 헤더만 있고 데이터 행이 없음을 안내 |
-| ATTACH-EDGE-006 | `edge_cases/corrupted.png` | ImageHandler | 미실행 | 첨부한 이미지에 적힌 텍스트를 읽어줘. | 이미지 디코딩 실패를 안전하게 처리하고 오류 안내 |
-| ATTACH-EDGE-007 | `edge_cases/empty.pdf` | PdfHandler | 미실행 | 첨부한 PDF 내용을 요약해줘. | 텍스트 없는 PDF를 안전하게 안내 |
-| ATTACH-EDGE-008 | `edge_cases/empty.docx` | DocxHandler | 미실행 | 첨부한 DOCX 문서 내용을 요약해줘. | 비어 있는 문서임을 안전하게 안내 |
-| ATTACH-EDGE-009 | `edge_cases/empty_sheet.xlsx` | XlsxHandler | 미실행 | 첨부한 XLSX 파일의 시트 내용을 요약해줘. | 빈 시트임을 안전하게 안내 |
-| ATTACH-EDGE-010 | `edge_cases/empty.pptx` | PptxHandler | 미실행 | 첨부한 PPTX 파일의 슬라이드 내용을 요약해줘. | 텍스트 없는 슬라이드임을 안전하게 안내 |
-| ATTACH-EDGE-011 | `edge_cases/unsupported.exe` | Unsupported | 미실행 | 첨부한 파일 내용을 확인해줘. | 지원하지 않는 확장자 오류 표시 |
-| ATTACH-EDGE-012 | `edge_cases/unsupported.zip` | Unsupported | 미실행 | 첨부한 파일 내용을 확인해줘. | 지원하지 않는 확장자 오류 표시 |
+| ATTACH-EDGE-001 | `edge_cases/empty.txt` | TextHandler | 성공 | 첨부한 텍스트 파일 내용을 요약해줘. | 빈 파일이라 요약할 내용이 없음을 안전하게 안내 |
+| ATTACH-EDGE-002 | `edge_cases/large_context_limit.txt` | TextHandler | 성공 | 첨부한 큰 텍스트 파일의 앞부분 기준으로 핵심 내용을 요약해줘. | 앞부분 더미 텍스트를 요약하고 본문 끝부분이 잘렸음을 안내 |
+| ATTACH-EDGE-003 | `edge_cases/malformed.json` | TextHandler | 성공 | 첨부한 JSON 파일을 읽고 주요 내용을 요약해줘. | 잘못된 JSON 구조와 파싱 실패 가능성을 안전하게 안내 |
+| ATTACH-EDGE-004 | `edge_cases/invalid.yaml` | TextHandler | 이슈 발견 | 첨부한 YAML 파일을 읽고 주요 내용을 요약해줘. | YAML 오류 내용은 안내했으나 마크다운 목록/들여쓰기와 코드블록 렌더링이 여러 조각으로 깨짐 |
+| ATTACH-EDGE-005 | `edge_cases/empty_rows.csv` | CsvHandler | 성공 | 첨부한 CSV 파일의 컬럼명과 데이터 행을 요약해줘. | 컬럼명 5개와 데이터 행 없음 상태를 안내 |
+| ATTACH-EDGE-006 | `edge_cases/corrupted.png` | ImageHandler | 이슈 발견 | 첨부한 이미지에 적힌 텍스트를 읽어줘. | 손상 이미지 전송 시 400 `Failed to load image or audio file` 원시 API 오류가 노출됨 |
+| ATTACH-EDGE-007 | `edge_cases/empty.pdf` | PdfHandler | 성공 | 첨부한 PDF 내용을 요약해줘. | 추출 가능한 텍스트가 없음을 안전하게 안내 |
+| ATTACH-EDGE-008 | `edge_cases/empty.docx` | DocxHandler | 성공 | 첨부한 DOCX 문서 내용을 요약해줘. | 추출 가능한 문서 텍스트가 없음을 안전하게 안내 |
+| ATTACH-EDGE-009 | `edge_cases/empty_sheet.xlsx` | XlsxHandler | 이슈 발견 | 첨부한 XLSX 파일의 시트 내용을 요약해줘. | 정상 XLSX와 동일하게 "XLSX 파일을 읽을 수 없어요" 오류 발생. `ATTACH-FIX-006` 경로 파싱 이슈 범위 |
+| ATTACH-EDGE-010 | `edge_cases/empty.pptx` | PptxHandler | 성공 | 첨부한 PPTX 파일의 슬라이드 내용을 요약해줘. | 전체 슬라이드 1개와 텍스트 없음 상태를 안전하게 안내 |
+| ATTACH-EDGE-011 | `edge_cases/unsupported.exe` | Unsupported | 이슈 발견 | 첨부한 파일 내용을 확인해줘. | 파일을 정확히 드롭하지 않았는데 드래그 중 미지원 형식 오류 채팅이 20회 이상 반복 생성됨 |
+| ATTACH-EDGE-012 | `edge_cases/unsupported.zip` | Unsupported | 이슈 발견 | 첨부한 파일 내용을 확인해줘. | `unsupported.exe`와 동일하게 드래그 중 미지원 형식 오류 채팅이 반복 생성됨 |
 
 ## 향후 기능 테스트 작성 규칙
 
