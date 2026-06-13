@@ -59,7 +59,7 @@ class OllamaClient:
         ollama_messages = self._to_ollama_messages(messages)
 
         try:
-            stream = self._client.chat(model=model, messages=ollama_messages, stream=True)
+            stream = self._client.chat(model=model, messages=ollama_messages, stream=True, think=False)
             for chunk in stream:
                 content = self._value(self._value(chunk, "message", {}), "content", "")
                 if content:

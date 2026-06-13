@@ -648,8 +648,6 @@ class MessageBubble(QWidget):
     def _append_inline_segments(self, segments: list[tuple[str, str]], text: str) -> None:
         if self._append_detected_code_list_segments(segments, text):
             return
-        if self._append_detected_technical_line_segments(segments, text):
-            return
 
         position = 0
         for match in re.finditer(r"`([^`\n]+)`", text):

@@ -12,6 +12,7 @@ class PromptProfileResolver:
         "command": ("command.md",),
         "commit_message": ("commit_message.md",),
         "pr_description": ("pr_description.md",),
+        "code_generation": ("code_generation.md",),
         "code_explain": ("code_explain.md",),
         "code_fix": ("code_fix.md",),
         "image_question": ("image_question.md",),
