@@ -620,8 +620,8 @@ QScrollBar::sub-line:vertical {
 }
 
 #chatHistoryHeader {
-    background: rgba(255, 255, 255, 116);
     border-bottom: 1px solid rgba(222, 227, 235, 150);
+    background: rgba(249, 251, 254, 120);
 }
 
 #chatHistoryBackButton {
@@ -639,14 +639,8 @@ QScrollBar::sub-line:vertical {
 
 #chatHistoryHeaderTitle {
     color: #20242c;
-    font-size: 14px;
-    font-weight: 750;
-}
-
-#chatHistoryCount {
-    color: #69707c;
-    font-size: 12px;
-    font-weight: 650;
+    font-size: 13px;
+    font-weight: 700;
 }
 
 #chatHistoryScrollArea {
@@ -661,8 +655,8 @@ QScrollBar::sub-line:vertical {
 }
 
 #chatHistoryItem[dragging="true"] {
-    background: #f4f8ff;
-    border: 1px solid rgba(47, 128, 255, 120);
+    background: #f7fbff;
+    border: 1px solid rgba(47, 128, 255, 150);
 }
 
 #chatHistoryItem:hover {
@@ -670,29 +664,34 @@ QScrollBar::sub-line:vertical {
 }
 
 #chatHistoryTitle {
-    color: #20242c;
+    color: #11131a;
     font-size: 13px;
     font-weight: 750;
 }
 
+#chatHistoryBody {
+    color: #737b88;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 17px;
+}
+
 #chatHistoryDate,
 #chatHistoryEmpty {
-    color: #7c8491;
+    color: #8c94a2;
     font-size: 11px;
-    font-weight: 550;
+    font-weight: 600;
 }
 
 #chatHistoryDeleteButton {
     background: transparent;
     border: none;
-    color: #8a93a1;
-    font-size: 14px;
-    font-weight: 650;
+    color: #b0b8c8;
+    font-size: 13px;
+    font-weight: 700;
 }
 
 #chatHistoryDeleteButton:hover {
-    background: rgba(238, 242, 247, 180);
-    border-radius: 11px;
     color: #f04452;
 }
 

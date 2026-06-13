@@ -39,7 +39,7 @@ from PyQt6.QtWidgets import (
 import storage.chat_store as chat_store
 from core.llm.chat_service import ChatService
 from core.llm.contracts import ChatAttachmentPayload, ChatMessagePayload
-from ui.assets import asset_path
+from ui.assets import asset_path, tinted_icon
 from ui.chat_worker import ChatWorker
 from ui.widgets.message_bubble import MessageAttachment, MessageBubble
 from ui.widgets.switch_button import SwitchButton
@@ -208,13 +208,15 @@ class ChatHistoryDragHandle(QWidget):
 
 class ChatHistoryItem(QFrame):
     H_MARGIN = 24
-    V_MARGIN = 18
-    MIN_HEIGHT = 56
+    V_MARGIN = 24
+    MIN_HEIGHT = 88
     CHROME_WIDTH = 14 + 28 + 18 + H_MARGIN
+    BODY_MAX_LINES = 1
 
     def __init__(self, session: chat_store.ChatSession, parent_view: "ChatHistoryView") -> None:
         super().__init__()
         self._session = session
+        self._messages = chat_store.get_messages(session.id)
         self._parent_view = parent_view
         self._drag_active = False
         self.setObjectName("chatHistoryItem")
@@ -228,13 +230,18 @@ class ChatHistoryItem(QFrame):
 
     def _setup_ui(self) -> None:
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 9, 12, 9)
+        layout.setContentsMargins(12, 11, 12, 11)
         layout.setSpacing(8)
 
         self._title = QLabel(self._session.title.strip() or "새 대화")
         self._title.setObjectName("chatHistoryTitle")
         self._title.setWordWrap(False)
         self._title.installEventFilter(self)
+
+        self._body = QLabel(self._display_body())
+        self._body.setObjectName("chatHistoryBody")
+        self._body.setWordWrap(True)
+        self._body.installEventFilter(self)
 
         self._date = QLabel(self._display_date())
         self._date.setObjectName("chatHistoryDate")
@@ -244,6 +251,7 @@ class ChatHistoryItem(QFrame):
         text_col.setContentsMargins(0, 0, 0, 0)
         text_col.setSpacing(5)
         text_col.addWidget(self._title)
+        text_col.addWidget(self._body)
         text_col.addWidget(self._date)
 
         delete_btn = QPushButton("x")
@@ -259,15 +267,27 @@ class ChatHistoryItem(QFrame):
     def set_card_width(self, width: int) -> None:
         width = max(160, width)
         text_width = max(80, width - self.CHROME_WIDTH)
-        metrics = self._title.fontMetrics()
-        self._title.setText(metrics.elidedText(self._session.title.strip() or "새 대화", Qt.TextElideMode.ElideRight, text_width))
-        self._title.setFixedSize(text_width, metrics.height() + 2)
-        date_height = self._date.fontMetrics().height() + 2
+
+        title_metrics = self._title.fontMetrics()
+        body_metrics = self._body.fontMetrics()
+        date_metrics = self._date.fontMetrics()
+
+        self._title.setText(title_metrics.elidedText(self._display_title(), Qt.TextElideMode.ElideRight, text_width))
+        self._body.setText(self._elided_body(text_width))
+
+        title_height = title_metrics.height() + 2
+        body_lines = max(1, self._body.text().count("\n") + 1) if self._body.text() else 0
+        body_height = body_lines * body_metrics.lineSpacing()
+        date_height = date_metrics.height() + 2
+        content_height = title_height + body_height + date_height + 10
+
+        self._title.setFixedSize(text_width, title_height)
+        self._body.setFixedSize(text_width, body_height)
         self._date.setFixedSize(text_width, date_height)
-        self.setFixedSize(width, max(self.MIN_HEIGHT, metrics.height() + date_height + self.V_MARGIN))
+        self.setFixedSize(width, max(self.MIN_HEIGHT, content_height + self.V_MARGIN))
 
     def eventFilter(self, watched, event) -> bool:  # noqa: N802
-        if watched in (self._title, self._date):
+        if watched in (self._title, self._body, self._date):
             if event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
                 self._parent_view.open_session(self._session.id)
                 return True
@@ -305,6 +325,37 @@ class ChatHistoryItem(QFrame):
             self.releaseMouse()
         self._parent_view.end_drag()
 
+    def _display_title(self) -> str:
+        return self._session.title.strip() or "새 대화"
+
+    def _display_body(self) -> str:
+        assistant = next(
+            (
+                self._preview_text(message.content)
+                for message in self._messages
+                if message.role == "assistant" and self._preview_text(message.content)
+            ),
+            "",
+        )
+        if assistant:
+            return assistant
+
+        return next(
+            (
+                self._preview_text(message.content)
+                for message in self._messages
+                if message.role == "user" and self._preview_text(message.content)
+            ),
+            "",
+        )
+
+    def _elided_body(self, width: int) -> str:
+        text = self._display_body()
+        if not text:
+            return ""
+        metrics = self._body.fontMetrics()
+        return metrics.elidedText(text, Qt.TextElideMode.ElideRight, width)
+
     def _display_date(self) -> str:
         value = self._session.updated_at or self._session.created_at
         try:
@@ -316,6 +367,10 @@ class ChatHistoryItem(QFrame):
         if dt.date() == now.date():
             return dt.strftime("오늘 %p %-I:%M").replace("AM", "오전").replace("PM", "오후")
         return dt.strftime("%-m월 %-d일 %p %-I:%M").replace("AM", "오전").replace("PM", "오후")
+
+    @staticmethod
+    def _preview_text(text: str) -> str:
+        return " ".join(line.strip() for line in text.splitlines() if line.strip())
 
 
 class ChatHistoryView(QWidget):
@@ -365,24 +420,25 @@ class ChatHistoryView(QWidget):
         frame = QFrame()
         frame.setObjectName("chatHistoryHeader")
         layout = QHBoxLayout(frame)
-        layout.setContentsMargins(17, 4, 17, 7)
-        layout.setSpacing(6)
+        layout.setContentsMargins(17, 10, 17, 10)
+        layout.setSpacing(7)
 
         back = QPushButton("‹")
         back.setObjectName("chatHistoryBackButton")
-        back.setFixedSize(26, 26)
+        back.setFixedSize(22, 22)
         back.setCursor(Qt.CursorShape.PointingHandCursor)
         back.clicked.connect(self.back_requested.emit)
 
-        title = QLabel("채팅 기록")
-        title.setObjectName("chatHistoryHeaderTitle")
+        chat_icon = QLabel()
+        chat_icon.setFixedSize(20, 20)
+        chat_icon.setPixmap(tinted_icon("chat.png", QColor("#20242c"), QSize(17, 17)).pixmap(17, 17))
 
-        self._count_label = QLabel("0")
-        self._count_label.setObjectName("chatHistoryCount")
+        self._title_label = QLabel("채팅 기록 0")
+        self._title_label.setObjectName("chatHistoryHeaderTitle")
 
         layout.addWidget(back)
-        layout.addWidget(title)
-        layout.addWidget(self._count_label)
+        layout.addWidget(chat_icon)
+        layout.addWidget(self._title_label)
         layout.addStretch(1)
         return frame
 
@@ -392,7 +448,7 @@ class ChatHistoryView(QWidget):
         self._empty_label.setVisible(not sessions)
         for session in sessions:
             self._insert_item(session)
-        self._count_label.setText(str(len(sessions)))
+        self._title_label.setText(f"채팅 기록 {len(sessions)}")
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
