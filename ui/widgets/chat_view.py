@@ -60,6 +60,8 @@ SUPPORTED_ATTACHMENT_EXTENSIONS = {
 }
 DRAG_AUTOSCROLL_MARGIN = 56
 DRAG_AUTOSCROLL_MAX_STEP = 18
+MAX_ATTACHMENT_COUNT = 5
+MAX_TOTAL_ATTACHMENT_BYTES = 5 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -256,6 +258,7 @@ class ChatView(QWidget):
         self._chat_service = chat_service or ChatService()
         self._worker = ChatWorker(self._chat_service)
         self._assistant_bubble: MessageBubble | None = None
+        self._assistant_has_content = False
         self._attachments: list[ChatAttachment] = []
         self._history_enabled = False
         self._toast = QLabel("복사됨", self)
@@ -412,6 +415,7 @@ class ChatView(QWidget):
         self._prompt.clear()
         self._clear_attachments()
         self._assistant_bubble = self._add_message("assistant", "")
+        self._assistant_has_content = False
         self._assistant_bubble.show_loading_indicator()
         self._set_input_enabled(False)
         self._worker.start(request_text, request_attachments)
@@ -437,15 +441,20 @@ class ChatView(QWidget):
             return
 
         self._assistant_bubble.hide_loading_indicator()
+        if token.strip():
+            self._assistant_has_content = True
         self._assistant_bubble.append_token(token)
         self._scroll_to_bottom()
 
     def _finish_response(self) -> None:
         if self._assistant_bubble is not None:
             self._assistant_bubble.hide_loading_indicator()
+            if not self._assistant_has_content:
+                self._assistant_bubble.set_text("응답을 생성하지 못했습니다. 다시 시도해주세요.")
             self._assistant_bubble.render_markdown()
             self._register_pointer_autoscroll_widget(self._assistant_bubble)
         self._assistant_bubble = None
+        self._assistant_has_content = False
         self._set_input_enabled(True)
         self._scroll_to_bottom()
 
@@ -598,6 +607,7 @@ class ChatView(QWidget):
             return
 
         unsupported: list[str] = []
+        candidates: list[ChatAttachment] = []
         existing = {attachment.path for attachment in self._attachments}
         for value in paths:
             path = Path(value)
@@ -606,8 +616,20 @@ class ChatView(QWidget):
                 continue
             if path in existing:
                 continue
-            self._attachments.append(ChatAttachment(path))
+            candidates.append(ChatAttachment(path))
             existing.add(path)
+
+        current_size = self._total_attachment_size(self._attachments)
+        candidate_size = self._total_attachment_size(candidates)
+        if candidates and len(self._attachments) + len(candidates) > MAX_ATTACHMENT_COUNT:
+            self._show_error(f"첨부파일은 한 번에 최대 {MAX_ATTACHMENT_COUNT}개까지 추가할 수 있습니다.")
+        elif candidates and current_size + candidate_size > MAX_TOTAL_ATTACHMENT_BYTES:
+            self._show_error(
+                "첨부파일 용량이 커서 추가할 수 없습니다. "
+                f"첨부파일은 한 번에 최대 {self._format_file_size(MAX_TOTAL_ATTACHMENT_BYTES)}까지 추가할 수 있습니다."
+            )
+        else:
+            self._attachments.extend(candidates)
 
         self._refresh_attachment_previews()
         if unsupported:
@@ -637,6 +659,24 @@ class ChatView(QWidget):
     def _clear_attachments(self) -> None:
         self._attachments.clear()
         self._refresh_attachment_previews()
+
+    @staticmethod
+    def _total_attachment_size(attachments: list[ChatAttachment]) -> int:
+        total = 0
+        for attachment in attachments:
+            try:
+                total += attachment.path.stat().st_size
+            except OSError:
+                continue
+        return total
+
+    @staticmethod
+    def _format_file_size(size_bytes: int) -> str:
+        if size_bytes >= 1024 * 1024:
+            return f"{size_bytes / (1024 * 1024):.0f}MB"
+        if size_bytes >= 1024:
+            return f"{size_bytes / 1024:.0f}KB"
+        return f"{size_bytes}B"
 
     def _message_text_with_attachments(self, text: str) -> str:
         if not self._attachments:

@@ -17,7 +17,7 @@
 | ATTACH-NORMAL-007 | `normal/sample.tsv` | CsvHandler | 성공 | 첨부한 TSV 파일의 컬럼명과 샘플 행을 요약해줘. | 컬럼명 5개와 샘플 데이터 행 인식 확인 |
 | ATTACH-NORMAL-008 | `normal/sample.png` | ImageHandler | 성공 | 첨부한 이미지에 적힌 텍스트를 읽어줘. | 이미지 라벨 `sample.png - ImageHandler test` 인식 확인 |
 | ATTACH-NORMAL-009 | `normal/sample.jpg` | ImageHandler | 성공 | 첨부한 이미지 3줄로 설명해줘. | JPG 이미지 라벨과 ImageHandler 테스트 목적 인식 확인 |
-| ATTACH-NORMAL-010 | `normal/sample.jpeg` | ImageHandler | 성공 | 첨부한 이미지에 적힌 텍스트를 읽어줘. | 새 세션에서 이미지 라벨 `sample.jpeg - ImageHandler test` 인식 확인 |
+| ATTACH-NORMAL-010 | `normal/sample.jpeg` | ImageHandler | 성공 | 첨부한 이미지에 적힌 텍스트를 읽어줘. | 새 세션에서 이미지 라벨 `sample.jpeg - ImageHandler test` 인식 확인. context 초과 시 대화 누적/첨부 용량 초과를 구분한 사용자용 메시지 표시 확인 |
 | ATTACH-NORMAL-011 | `normal/sample.gif` | ImageHandler | 이슈 발견 | 첨부한 이미지 분석해서 어떤건지 요약해줘. | GIF 이미지 라벨과 테스트 목적은 인식했으나, 요청하지 않은 코드 예시와 분리된 코드블록이 함께 출력됨 |
 | ATTACH-NORMAL-012 | `normal/sample.bmp` | ImageHandler | 성공 | 첨부한 이미지에 적힌 텍스트를 읽어줘. | 이미지 라벨 `sample.bmp - ImageHandler test` 인식 확인 |
 | ATTACH-NORMAL-013 | `normal/sample.pdf` | PdfHandler | 성공 | 첨부한 PDF의 페이지별 핵심 내용을 요약해줘. | `pypdf` 누락/fallback 오진 없이 PDF 텍스트 추출 경로가 동작함. 동일 답변 반복, 추출 텍스트 과해석, 코드블록 카드 분리 렌더링은 응답/렌더링 안정성 항목에서 별도 처리 |
@@ -34,7 +34,7 @@
 | ATTACH-EDGE-003 | `edge_cases/malformed.json` | TextHandler | 성공 | 첨부한 JSON 파일을 읽고 주요 내용을 요약해줘. | 잘못된 JSON 구조와 파싱 실패 가능성을 안전하게 안내 |
 | ATTACH-EDGE-004 | `edge_cases/invalid.yaml` | TextHandler | 이슈 발견 | 첨부한 YAML 파일을 읽고 주요 내용을 요약해줘. | YAML 오류 내용은 안내했으나 마크다운 목록/들여쓰기와 코드블록 렌더링이 여러 조각으로 깨짐 |
 | ATTACH-EDGE-005 | `edge_cases/empty_rows.csv` | CsvHandler | 성공 | 첨부한 CSV 파일의 컬럼명과 데이터 행을 요약해줘. | 컬럼명 5개와 데이터 행 없음 상태를 안내 |
-| ATTACH-EDGE-006 | `edge_cases/corrupted.png` | ImageHandler | 이슈 발견 | 첨부한 이미지에 적힌 텍스트를 읽어줘. | 손상 이미지 전송 시 400 `Failed to load image or audio file` 원시 API 오류가 노출됨 |
+| ATTACH-EDGE-006 | `edge_cases/corrupted.png` | ImageHandler | 성공 | 첨부한 이미지에 적힌 텍스트를 읽어줘. | 손상 이미지 전송 시 원시 API 오류 대신 이미지 파일을 읽을 수 없다는 사용자용 메시지 표시 확인 |
 | ATTACH-EDGE-007 | `edge_cases/empty.pdf` | PdfHandler | 성공 | 첨부한 PDF 내용을 요약해줘. | `pypdf` 누락 안내 없이 추출 가능한 텍스트가 없음을 안전하게 안내. 동일 답변 반복은 응답 안정성 항목에서 별도 처리 |
 | ATTACH-EDGE-008 | `edge_cases/empty.docx` | DocxHandler | 성공 | 첨부한 DOCX 문서 내용을 요약해줘. | 추출 가능한 문서 텍스트가 없음을 안전하게 안내 |
 | ATTACH-EDGE-009 | `edge_cases/empty_sheet.xlsx` | XlsxHandler | 성공 | 첨부한 XLSX 파일의 시트 내용을 요약해줘. | 빈 시트를 읽고 분석 가능 데이터가 없음을 안내하는 것을 확인. 동일 문구 반복 출력은 응답 안정성 항목에서 별도 처리 |
