@@ -67,7 +67,7 @@ class ResponseFormatter:
         if not _is_short_translation_request(request.user_message.content):
             return text
 
-        translated = self._first_result_line(text)
+        translated = self._first_translation_result(text)
         if not translated:
             return text
         if "\n" in translated or len(translated) > 80:
@@ -297,6 +297,22 @@ class ResponseFormatter:
         return ""
 
     @staticmethod
+    def _first_translation_result(text: str) -> str:
+        text = ResponseFormatter._unwrap_translation_code_fence(text)
+        for line in text.splitlines():
+            candidate = _clean_translation_line(line)
+            if candidate:
+                return candidate
+        return ""
+
+    @staticmethod
+    def _unwrap_translation_code_fence(text: str) -> str:
+        match = re.fullmatch(r"\s*```[a-zA-Z0-9_-]*\n(.*?)\n?```\s*", text, flags=re.DOTALL)
+        if not match:
+            return text
+        return match.group(1).strip()
+
+    @staticmethod
     def _language_for_code_request(text: str) -> str:
         normalized = text.lower()
         if "sql" in normalized or "쿼리" in normalized:
@@ -404,6 +420,29 @@ def _clean_candidate(text: str) -> str:
         candidate = candidate.split(" - ", 1)[0].strip()
     if ": " in candidate and not candidate.startswith(("feat:", "fix:", "ui:", "refactor:", "docs:", "chore:")):
         candidate = candidate.split(": ", 1)[0].strip()
+    return candidate
+
+
+def _clean_translation_line(text: str) -> str:
+    candidate = text.strip()
+    candidate = re.sub(r"^[-*]\s+", "", candidate)
+    candidate = re.sub(r"^\d+[.)]\s+", "", candidate)
+    candidate = candidate.strip("` ")
+    if not candidate:
+        return ""
+
+    if candidate.lower() in {"text", "txt", "translation", "result", "output", "answer"}:
+        return ""
+
+    for label in ("translation", "result", "answer", "english", "korean", "japanese", "번역", "결과", "답"):
+        match = re.match(rf"^{label}\s*[:：]\s*(.+)$", candidate, flags=re.IGNORECASE)
+        if match:
+            candidate = match.group(1).strip()
+            break
+
+    candidate = candidate.strip("`'\"“”‘’ ")
+    if not candidate or candidate.lower() in {"text", "txt"}:
+        return ""
     return candidate
 
 
