@@ -47,10 +47,19 @@ def create_session(title: str = "새 대화") -> ChatSession:
 
 
 def get_all_sessions() -> list[ChatSession]:
-    """사용자가 정렬한 순서로 전체 세션 반환"""
+    """사용자가 정렬한 순서로 메시지가 있는 세션만 반환"""
     with get_connection() as conn:
         rows = conn.execute(
-            "SELECT * FROM chat_sessions ORDER BY ord ASC, updated_at DESC, id DESC"
+            """
+            SELECT s.*
+            FROM chat_sessions AS s
+            WHERE EXISTS (
+                SELECT 1
+                FROM chat_messages AS m
+                WHERE m.session_id = s.id
+            )
+            ORDER BY s.ord ASC, s.updated_at DESC, s.id DESC
+            """
         ).fetchall()
     return [_row_to_session(r) for r in rows]
 

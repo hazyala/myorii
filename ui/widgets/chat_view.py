@@ -208,9 +208,9 @@ class ChatHistoryDragHandle(QWidget):
 
 class ChatHistoryItem(QFrame):
     H_MARGIN = 24
-    V_MARGIN = 24
-    MIN_HEIGHT = 74
-    CHROME_WIDTH = 14 + 28 + 16 + H_MARGIN
+    V_MARGIN = 18
+    MIN_HEIGHT = 56
+    CHROME_WIDTH = 14 + 28 + 18 + H_MARGIN
 
     def __init__(self, session: chat_store.ChatSession, parent_view: "ChatHistoryView") -> None:
         super().__init__()
@@ -228,7 +228,7 @@ class ChatHistoryItem(QFrame):
 
     def _setup_ui(self) -> None:
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 11, 12, 11)
+        layout.setContentsMargins(12, 9, 12, 9)
         layout.setSpacing(8)
 
         self._title = QLabel(self._session.title.strip() or "새 대화")
@@ -252,8 +252,8 @@ class ChatHistoryItem(QFrame):
         delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         delete_btn.clicked.connect(lambda: self._parent_view.delete_session(self))
 
+        layout.addWidget(ChatHistoryDragHandle(self), 0, Qt.AlignmentFlag.AlignVCenter)
         layout.addLayout(text_col, 1)
-        layout.addWidget(ChatHistoryDragHandle(self), 0, Qt.AlignmentFlag.AlignTop)
         layout.addWidget(delete_btn, 0, Qt.AlignmentFlag.AlignTop)
 
     def set_card_width(self, width: int) -> None:
@@ -262,8 +262,9 @@ class ChatHistoryItem(QFrame):
         metrics = self._title.fontMetrics()
         self._title.setText(metrics.elidedText(self._session.title.strip() or "새 대화", Qt.TextElideMode.ElideRight, text_width))
         self._title.setFixedSize(text_width, metrics.height() + 2)
-        self._date.setFixedSize(text_width, self._date.fontMetrics().height() + 2)
-        self.setFixedSize(width, self.MIN_HEIGHT + self.V_MARGIN)
+        date_height = self._date.fontMetrics().height() + 2
+        self._date.setFixedSize(text_width, date_height)
+        self.setFixedSize(width, max(self.MIN_HEIGHT, metrics.height() + date_height + self.V_MARGIN))
 
     def eventFilter(self, watched, event) -> bool:  # noqa: N802
         if watched in (self._title, self._date):
@@ -322,7 +323,7 @@ class ChatHistoryView(QWidget):
     session_selected = pyqtSignal(int)
 
     LIST_MARGIN_X = 14
-    ITEM_GAP = 8
+    ITEM_GAP = 7
 
     def __init__(self) -> None:
         super().__init__()
@@ -348,7 +349,7 @@ class ChatHistoryView(QWidget):
         self._list_widget = QWidget()
         self._list_widget.setObjectName("chatHistoryListContent")
         self._list_layout = QVBoxLayout(self._list_widget)
-        self._list_layout.setContentsMargins(self.LIST_MARGIN_X, 12, self.LIST_MARGIN_X, 10)
+        self._list_layout.setContentsMargins(self.LIST_MARGIN_X, 9, self.LIST_MARGIN_X, 10)
         self._list_layout.setSpacing(self.ITEM_GAP)
         self._list_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self._empty_label = QLabel("저장된 채팅이 없습니다.")
@@ -364,12 +365,12 @@ class ChatHistoryView(QWidget):
         frame = QFrame()
         frame.setObjectName("chatHistoryHeader")
         layout = QHBoxLayout(frame)
-        layout.setContentsMargins(17, 10, 17, 10)
-        layout.setSpacing(7)
+        layout.setContentsMargins(17, 4, 17, 7)
+        layout.setSpacing(6)
 
         back = QPushButton("‹")
         back.setObjectName("chatHistoryBackButton")
-        back.setFixedSize(30, 30)
+        back.setFixedSize(26, 26)
         back.setCursor(Qt.CursorShape.PointingHandCursor)
         back.clicked.connect(self.back_requested.emit)
 
@@ -610,14 +611,11 @@ class ChatView(QWidget):
     def set_model(self, model: str) -> None:
         self._chat_service.set_model(model)
 
-    def discard_unsaved_session(self) -> None:
-        if not self._transcript:
+    def prepare_for_window_close(self) -> None:
+        if self._worker.is_running:
             return
-        if self._current_session_id is None:
-            self._reset_conversation()
-            return
-        if len(self._transcript) > self._last_saved_transcript_len:
-            self._load_session(self._current_session_id)
+        self._reset_conversation()
+        self._show_conversation()
 
     def _conversation_panel(self) -> QWidget:
         page = QWidget()

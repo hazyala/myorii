@@ -281,7 +281,7 @@ class MainWindow(QMainWindow):
 
     def _hide_window(self) -> None:
         if hasattr(self, "_chat_view"):
-            self._chat_view.discard_unsaved_session()
+            self._chat_view.prepare_for_window_close()
         self.hide()
 
     def _update_available_models(self, models: list[str]) -> None:
@@ -628,7 +628,7 @@ QScrollBar::sub-line:vertical {
     background: transparent;
     border: none;
     color: #555c68;
-    font-size: 24px;
+    font-size: 22px;
     font-weight: 500;
 }
 
@@ -671,14 +671,14 @@ QScrollBar::sub-line:vertical {
 
 #chatHistoryTitle {
     color: #20242c;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 750;
 }
 
 #chatHistoryDate,
 #chatHistoryEmpty {
     color: #7c8491;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 550;
 }
 
