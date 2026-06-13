@@ -8,7 +8,7 @@ from core.llm.ollama_client import ModelNotFound, OllamaClient, OllamaNotRunning
 from core.llm.router import IntentRouter, ModelRouter, PromptProfileResolver, ResponseFormatter
 
 
-DEFAULT_MODEL = "qwen3-vl:4b"
+DEFAULT_MODEL = "qwen3-vl:4b-instruct"
 MAX_ATTACHMENT_CONTEXT_CHARS = 3600
 ATTACHMENT_CONTEXT_TRUNCATION_NOTICE = "\n[일부 생략: 내용이 많거나 복잡한 첨부파일은 일부 내용만 참고할 수 있습니다.]"
 ATTACHMENT_CONTEXT_HEADER = "첨부파일 참고 내용:"

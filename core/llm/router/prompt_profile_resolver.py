@@ -6,6 +6,8 @@ from core.llm.prompt_loader import load_prompt
 class PromptProfileResolver:
     """Builds a short system prompt from common and intent-specific profiles."""
 
+    _SYSTEMLESS_INTENTS = {"translate"}
+
     _PROFILE_BY_INTENT = {
         "simple_chat": ("simple_chat.md",),
         "translate": ("translate.md",),
@@ -29,7 +31,7 @@ class PromptProfileResolver:
     }
 
     def resolve(self, intent: str) -> str:
-        prompt_parts = [load_prompt("system.md")]
+        prompt_parts = [] if intent in self._SYSTEMLESS_INTENTS else [load_prompt("system.md")]
 
         if intent.startswith("naming_"):
             profile_names = ["naming_common.md"]
