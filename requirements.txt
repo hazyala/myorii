@@ -1,0 +1,7 @@
+PyQt6>=6.7
+pyinstaller>=6.0,<7.0
+ollama>=0.5.0
+pypdf>=4.0
+pdfminer.six>=20231228
+pyobjc-core>=10.0
+pyobjc-framework-Cocoa>=10.0

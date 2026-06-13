@@ -1,0 +1,638 @@
+from __future__ import annotations
+
+import re
+
+from core.llm.contracts import ChatRequest
+
+
+class ResponseFormatter:
+    """Normalizes copy-friendly responses for format-sensitive intents."""
+
+    _BUFFERED_INTENT_PREFIXES = ("naming_",)
+    _ATTACHMENT_INTENTS = {"document_question", "spreadsheet_question", "image_question"}
+    _BUFFERED_INTENTS = {
+        "translate",
+        "command",
+        "commit_message",
+        "code_generation",
+        "image_code_transcription",
+        *_ATTACHMENT_INTENTS,
+    }
+
+    def should_buffer(self, intent: str) -> bool:
+        return intent in self._BUFFERED_INTENTS or intent.startswith(self._BUFFERED_INTENT_PREFIXES)
+
+    def format(self, text: str, intent: str, request: ChatRequest) -> str:
+        cleaned = text.strip()
+        if not cleaned:
+            return cleaned
+        if intent.startswith("naming_"):
+            return self._format_code_candidates(cleaned, request, language=self._language_for_naming(intent, request))
+        if intent == "commit_message":
+            return self._format_commit_message(cleaned)
+        if intent == "translate":
+            return self._format_translation(cleaned, request)
+        if intent == "command":
+            return self._format_command(cleaned)
+        if intent == "code_generation":
+            return self._format_code_generation(cleaned, request)
+        if intent == "image_code_transcription":
+            return self._format_single_snippet(cleaned)
+        if intent in self._ATTACHMENT_INTENTS:
+            return self._format_attachment_response(cleaned)
+        return cleaned
+
+    def _format_attachment_response(self, text: str) -> str:
+        without_code_fences = self._unwrap_nontechnical_code_fences(text)
+        without_full_repeat = self._remove_full_repeat(without_code_fences)
+        return self._remove_adjacent_repeated_paragraphs(without_full_repeat)
+
+    def _format_code_candidates(self, text: str, request: ChatRequest, language: str) -> str:
+        candidates = self._extract_candidate_blocks(text)
+        if not candidates:
+            candidates = [line for line in self._extract_candidate_lines(text) if _is_candidate_like(line)]
+        limit = self._requested_count(request.user_message.content)
+        if limit is not None:
+            candidates = candidates[:limit]
+
+        if not candidates:
+            return text
+
+        blocks = "\n\n".join(f"```{language}\n{candidate}\n```" for candidate in candidates)
+        if self._wants_candidates_only(request.user_message.content):
+            return blocks
+        return "가장 무난한 후보입니다.\n\n" + blocks
+
+    def _format_commit_message(self, text: str) -> str:
+        candidates: list[str] = []
+        for _language, code in self._extract_code_blocks(text):
+            candidates.extend(_clean_commit_line(line) for line in code.splitlines())
+        candidates.extend(_clean_commit_line(line) for line in text.splitlines())
+        candidates = _dedupe([candidate for candidate in candidates if candidate])
+        if not candidates:
+            return text
+        return "\n\n".join(f"```text\n{candidate}\n```" for candidate in candidates[:3])
+
+    def _format_translation(self, text: str, request: ChatRequest) -> str:
+        if not _is_short_translation_request(request.user_message.content):
+            return text
+
+        translated = self._first_translation_result(text)
+        if not translated:
+            return text
+        if "\n" in translated or len(translated) > 80:
+            return text
+        return f"```text\n{translated}\n```"
+
+    def _format_command(self, text: str) -> str:
+        command_blocks = self._extract_command_blocks(text)
+        if command_blocks:
+            return "\n\n".join(f"```bash\n{command}\n```" for command in command_blocks)
+
+        if self._has_multiline_code_block(text):
+            return text
+
+        commands = [
+            line
+            for line in self._extract_candidate_lines(text)
+            if _is_shell_command(line) and not _is_command_language_label(line)
+        ]
+        if not commands:
+            return text
+
+        return "\n\n".join(f"```bash\n{command}\n```" for command in commands[:3])
+
+    def _format_code_generation(self, text: str, request: ChatRequest) -> str:
+        blocks = self._extract_code_blocks(text)
+        if blocks:
+            with_context = self._format_code_blocks_with_context(text, request)
+            if with_context:
+                return with_context
+            return "\n\n".join(
+                f"```{language or self._language_for_code_request(request.user_message.content)}\n{code}\n```"
+                for language, code in blocks
+            )
+
+        language = self._language_for_code_request(request.user_message.content)
+        with_context = self._format_likely_code_with_context(text, language)
+        if with_context:
+            return with_context
+        code = self._extract_likely_code(text)
+        if code:
+            return f"```{language}\n{code}\n```"
+        return text
+
+    def _format_code_blocks_with_context(self, text: str, request: ChatRequest) -> str:
+        pattern = re.compile(r"```([a-zA-Z0-9_-]*)\n(.*?)```", flags=re.DOTALL)
+        position = 0
+        parts: list[str] = []
+        text_found = False
+
+        for match in pattern.finditer(text):
+            before = self._clean_context_text(text[position : match.start()])
+            if before:
+                text_found = True
+                parts.append(before)
+
+            language = match.group(1) or self._language_for_code_request(request.user_message.content)
+            code = match.group(2).strip()
+            if code:
+                parts.append(f"```{language}\n{code}\n```")
+            position = match.end()
+
+        after = self._clean_context_text(text[position:])
+        if after:
+            text_found = True
+            parts.append(after)
+
+        if not text_found:
+            return ""
+        return "\n\n".join(parts)
+
+    def _format_likely_code_with_context(self, text: str, language: str) -> str:
+        lines = text.strip().splitlines()
+        code_indexes = [index for index, line in enumerate(lines) if _looks_like_code_or_command(line)]
+        if not code_indexes:
+            return ""
+
+        start = code_indexes[0]
+        end = code_indexes[-1] + 1
+        before = self._clean_context_text("\n".join(lines[:start]))
+        code = "\n".join(lines[start:end]).strip()
+        after = self._clean_context_text("\n".join(lines[end:]))
+        if not before and not after:
+            return ""
+        if not code:
+            return ""
+
+        parts = []
+        if before:
+            parts.append(before)
+        parts.append(f"```{language}\n{code}\n```")
+        if after:
+            parts.append(after)
+        return "\n\n".join(parts)
+
+    @staticmethod
+    def _clean_context_text(text: str) -> str:
+        paragraphs: list[str] = []
+        for paragraph in re.split(r"\n{2,}", text.strip()):
+            lines = []
+            for line in paragraph.splitlines():
+                cleaned = re.sub(r"^\s*\d+[.)]\s*", "", line.strip())
+                if cleaned:
+                    lines.append(cleaned)
+            if lines:
+                paragraphs.append(" ".join(lines))
+        return "\n\n".join(paragraphs)
+
+    def _format_single_snippet(self, text: str) -> str:
+        blocks = self._extract_code_blocks(text)
+        if len(blocks) != 1:
+            return text
+
+        language, code = blocks[0]
+        if not code:
+            return text
+
+        return f"```{language}\n{code}\n```" if language else f"```\n{code}\n```"
+
+    @staticmethod
+    def _extract_code_blocks(text: str) -> list[tuple[str, str]]:
+        blocks = re.findall(r"```([a-zA-Z0-9_-]*)\n(.*?)```", text, flags=re.DOTALL)
+        return [(language, code.strip()) for language, code in blocks if code.strip()]
+
+    def _extract_candidate_blocks(self, text: str) -> list[str]:
+        candidates: list[str] = []
+        for _language, code in self._extract_code_blocks(text):
+            code_lines = [_clean_candidate(line) for line in code.splitlines()]
+            useful_lines = [line for line in code_lines if _is_candidate_like(line)]
+            if useful_lines:
+                candidates.extend(useful_lines)
+                continue
+
+            candidate = _clean_candidate(code)
+            if candidate:
+                candidates.append(candidate)
+        return _dedupe(candidates)
+
+    def _extract_command_blocks(self, text: str) -> list[str]:
+        commands: list[str] = []
+        for language, code in self._extract_code_blocks(text):
+            if language and language not in {"bash", "sh", "shell", "zsh"}:
+                continue
+            lines = [_clean_command_line(line) for line in code.splitlines()]
+            non_empty_lines = [line for line in lines if line]
+            command_lines = [line for line in lines if _is_shell_command(line)]
+            if len(command_lines) == 1 and len(non_empty_lines) == 1:
+                commands.append(command_lines[0])
+            elif len(command_lines) == len(non_empty_lines):
+                commands.extend(command_lines)
+        return _dedupe(commands)
+
+    @staticmethod
+    def _extract_candidate_lines(text: str) -> list[str]:
+        candidates: list[str] = []
+        for line in text.splitlines():
+            candidate = _clean_candidate(line)
+            if not candidate:
+                continue
+            if _is_comment_line(candidate):
+                continue
+            if len(candidate.split()) > 6 and not _is_shell_command(candidate):
+                continue
+            candidates.append(candidate)
+        return _dedupe(candidates)
+
+    def _has_multiline_code_block(self, text: str) -> bool:
+        return any("\n" in code for _language, code in self._extract_code_blocks(text))
+
+    @staticmethod
+    def _unwrap_nontechnical_code_fences(text: str) -> str:
+        def replace(match: re.Match[str]) -> str:
+            language = match.group(1).strip().lower()
+            code = match.group(2).strip("\n")
+            if _looks_like_code_or_command(code):
+                return match.group(0)
+            if language in _CODE_FENCE_LANGUAGES:
+                return match.group(0)
+            return code
+
+        return re.sub(r"```([a-zA-Z0-9_-]*)\n(.*?)```", replace, text, flags=re.DOTALL)
+
+    @staticmethod
+    def _remove_full_repeat(text: str) -> str:
+        lines = text.splitlines()
+        for split in range(1, len(lines)):
+            left = [line.strip() for line in lines[:split] if line.strip()]
+            right = [line.strip() for line in lines[split:] if line.strip()]
+            if left and left == right:
+                return "\n".join(lines[:split]).strip()
+        return text
+
+    @staticmethod
+    def _remove_adjacent_repeated_paragraphs(text: str) -> str:
+        paragraphs = [paragraph for paragraph in re.split(r"\n{2,}", text.strip()) if paragraph.strip()]
+        if len(paragraphs) <= 1:
+            return text.strip()
+
+        result: list[str] = []
+        previous = ""
+        for paragraph in paragraphs:
+            normalized = re.sub(r"\s+", " ", paragraph).strip()
+            if normalized == previous:
+                continue
+            result.append(paragraph.strip())
+            previous = normalized
+        return "\n\n".join(result)
+
+    @staticmethod
+    def _requested_count(text: str) -> int | None:
+        match = re.search(r"(\d+)\s*개", text)
+        if not match:
+            return None
+        return max(1, min(int(match.group(1)), 10))
+
+    @staticmethod
+    def _wants_candidates_only(text: str) -> bool:
+        normalized = re.sub(r"\s+", " ", text.strip().lower())
+        return "만" in normalized or any(keyword in normalized for keyword in ("only", "just"))
+
+    @staticmethod
+    def _first_result_line(text: str) -> str:
+        for line in text.splitlines():
+            candidate = _clean_candidate(line)
+            if candidate:
+                return candidate
+        return ""
+
+    @staticmethod
+    def _first_translation_result(text: str) -> str:
+        text = ResponseFormatter._unwrap_translation_code_fence(text)
+        for line in text.splitlines():
+            candidate = _clean_translation_line(line)
+            if candidate:
+                return candidate
+        return ""
+
+    @staticmethod
+    def _unwrap_translation_code_fence(text: str) -> str:
+        match = re.fullmatch(r"\s*```[a-zA-Z0-9_-]*\n(.*?)\n?```\s*", text, flags=re.DOTALL)
+        if not match:
+            return text
+        return match.group(1).strip()
+
+    @staticmethod
+    def _language_for_code_request(text: str) -> str:
+        normalized = text.lower()
+        if "sql" in normalized or "쿼리" in normalized:
+            return "sql"
+        if "html" in normalized or "마크업" in normalized:
+            return "html"
+        if "css" in normalized or "스타일" in normalized or "스타일시트" in normalized:
+            return "css"
+        if "java" in normalized or "자바" in normalized:
+            return "java"
+        if "c++" in normalized or "cpp" in normalized:
+            return "cpp"
+        if "c#" in normalized or "csharp" in normalized:
+            return "csharp"
+        if re.search(r"\bc\s*(?:언어|code|코드)\b", normalized) or "c언어" in normalized:
+            return "c"
+        if "go" in normalized or "golang" in normalized:
+            return "go"
+        if "rust" in normalized or "러스트" in normalized:
+            return "rust"
+        if "swift" in normalized or "스위프트" in normalized:
+            return "swift"
+        if "kotlin" in normalized or "코틀린" in normalized:
+            return "kotlin"
+        if "php" in normalized:
+            return "php"
+        if "ruby" in normalized or "루비" in normalized:
+            return "ruby"
+        if "javascript" in normalized or "자바스크립트" in normalized or re.search(r"\bjs\b", normalized):
+            return "javascript"
+        if "typescript" in normalized or "타입스크립트" in normalized or re.search(r"\bts\b", normalized):
+            return "typescript"
+        if "shell" in normalized or "bash" in normalized or "스크립트" in normalized:
+            return "bash"
+        if "regex" in normalized or "정규식" in normalized:
+            return "text"
+        return "python"
+
+    @staticmethod
+    def _extract_likely_code(text: str) -> str:
+        lines = text.strip().splitlines()
+        if not lines:
+            return ""
+
+        non_empty_lines = [line for line in lines if line.strip()]
+        code_indexes = [index for index, line in enumerate(lines) if _looks_like_code_or_command(line)]
+        if not code_indexes:
+            return ""
+        if len(code_indexes) == len(non_empty_lines):
+            return text.strip()
+
+        start = code_indexes[0]
+        block: list[str] = []
+        for line in lines[start:]:
+            stripped = line.strip()
+            if not stripped:
+                if block:
+                    break
+                continue
+            if block and not _looks_like_code_or_command(line) and not line.startswith((" ", "\t")):
+                if re.search(r"[가-힣]\s+[가-힣]", stripped):
+                    break
+            block.append(line)
+
+        return "\n".join(block).strip()
+
+    @staticmethod
+    def _naming_style(text: str) -> str:
+        normalized = text.lower()
+        if any(keyword in normalized for keyword in ("java", "자바", "javascript", "자바스크립트", "typescript", "타입스크립트", "c#", "csharp")):
+            return "camel"
+        return "snake"
+
+    @staticmethod
+    def _language_for_naming(intent: str, request: ChatRequest) -> str:
+        if intent in {
+            "naming_class",
+            "naming_component",
+            "naming_constant",
+            "naming_endpoint",
+            "naming_file",
+            "naming_folder",
+            "naming_interface",
+            "naming_package",
+            "naming_pr",
+            "naming_table",
+            "naming_column",
+            "naming_type",
+            "naming_branch",
+        }:
+            return "text"
+        if intent == "naming_env":
+            return "bash"
+        if ResponseFormatter._naming_style(request.user_message.content) == "camel":
+            return "text"
+        return "python"
+
+
+def _clean_candidate(text: str) -> str:
+    candidate = text.strip()
+    candidate = re.sub(r"^[-*]\s+", "", candidate)
+    candidate = re.sub(r"^\d+[.)]\s+", "", candidate)
+    candidate = candidate.strip("` ")
+    candidate = re.sub(r"\s+#.*$", "", candidate).strip()
+    if " - " in candidate and not _is_shell_command(candidate):
+        candidate = candidate.split(" - ", 1)[0].strip()
+    match = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*.+$", candidate)
+    if match:
+        return match.group(1).strip()
+    if ": " in candidate and not candidate.startswith(("feat:", "fix:", "ui:", "refactor:", "docs:", "chore:")):
+        candidate = candidate.split(": ", 1)[0].strip()
+    return candidate
+
+
+def _clean_translation_line(text: str) -> str:
+    candidate = text.strip()
+    candidate = re.sub(r"^[-*]\s+", "", candidate)
+    candidate = re.sub(r"^\d+[.)]\s+", "", candidate)
+    candidate = candidate.strip("` ")
+    if not candidate:
+        return ""
+
+    if candidate.lower() in {"text", "txt", "translation", "result", "output", "answer"}:
+        return ""
+
+    for label in ("translation", "result", "answer", "english", "korean", "japanese", "번역", "결과", "답"):
+        match = re.match(rf"^{label}\s*[:：]\s*(.+)$", candidate, flags=re.IGNORECASE)
+        if match:
+            candidate = match.group(1).strip()
+            break
+
+    candidate = candidate.strip("`'\"“”‘’ ")
+    if not candidate or candidate.lower() in {"text", "txt"}:
+        return ""
+    return candidate
+
+
+def _clean_commit_line(text: str) -> str:
+    candidate = text.strip()
+    candidate = re.sub(r"^[-*]\s+", "", candidate)
+    candidate = re.sub(r"^\d+[.)]\s+", "", candidate)
+    candidate = candidate.strip("`'\"“”‘’ ")
+    match = re.match(r"^(feat|fix|ui|refactor|docs|chore)(?:\([^)]+\))?:\s+(.+)$", candidate)
+    if not match:
+        return ""
+    return f"{match.group(1)}: {match.group(2).strip()}"
+
+
+def _clean_command_line(text: str) -> str:
+    command = text.strip()
+    command = re.sub(r"^[-*]\s+", "", command)
+    command = re.sub(r"^\d+[.)]\s+", "", command)
+    return command.strip("` ")
+
+
+def _is_candidate_like(text: str) -> bool:
+    if not text or _is_comment_line(text):
+        return False
+    if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", text):
+        return True
+    if re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", text):
+        return True
+    if re.fullmatch(r"[A-Z][A-Za-z0-9]*", text):
+        return True
+    if re.fullmatch(r"[A-Z][A-Z0-9_]*", text):
+        return True
+    if re.fullmatch(r"[a-z0-9][a-z0-9._/-]*\.[a-z0-9]+", text):
+        return True
+    if re.fullmatch(r"[a-z0-9][a-z0-9._/-]*", text) and any(separator in text for separator in ("-", "/", "_")):
+        return True
+    if text.startswith(("feat:", "fix:", "ui:", "refactor:", "docs:", "chore:")):
+        return True
+    return False
+
+
+def _is_shell_command(text: str) -> bool:
+    exact_commands = {
+        "ls",
+        "pwd",
+    }
+    if text in exact_commands:
+        return True
+    command_prefixes = (
+        "./",
+        ".venv/",
+        "awk ",
+        "python",
+        "python3",
+        "cat ",
+        "find ",
+        "pip",
+        "pwd ",
+        "ls ",
+        "grep ",
+        "rg ",
+        "sed ",
+        "touch ",
+        "uv ",
+        "git ",
+        "npm ",
+        "pnpm ",
+        "yarn ",
+        "brew ",
+        "curl ",
+        "mkdir ",
+        "cd ",
+        "ollama ",
+    )
+    return text.startswith(command_prefixes)
+
+
+def _is_command_language_label(text: str) -> bool:
+    return text.strip().lower() in {"bash", "sh", "shell", "zsh"}
+
+
+def _looks_like_code_or_command(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return False
+
+    lines = [line.strip() for line in stripped.splitlines() if line.strip()]
+    if any(_is_shell_command(line) for line in lines):
+        return True
+    declaration = r"^(?:(?:public|private|protected|internal|static|final|abstract|sealed)\s+)*(async\s+def|def|class|interface|enum|struct|record|function|import|from|using|namespace)\b"
+    if any(re.match(declaration, line) for line in lines):
+        return True
+    if any(re.match(r"^[A-Za-z_][A-Za-z0-9_.]*\(.*\)$", line) for line in lines):
+        return True
+    if any(re.match(r"^(select|insert|update|delete|with|create|alter|drop)\b", line, flags=re.IGNORECASE) for line in lines):
+        return True
+    if any(re.search(r"[{};]|=>|</?\w+|=\s*[^=]", line) for line in lines):
+        return True
+    return False
+
+
+def _is_short_translation_request(text: str) -> bool:
+    normalized = re.sub(r"\s+", " ", text.strip().lower())
+    if not normalized:
+        return False
+    if not any(keyword in normalized for keyword in ("번역", "영어로", "한국어로", "일본어로", "translate", "뜻", "의미")):
+        return False
+
+    source = normalized
+    for token in (
+        "번역해줘",
+        "번역",
+        "영어로",
+        "한국어로",
+        "일본어로",
+        "translate",
+        "뜻",
+        "의미",
+        "뭐야",
+        "뭔가요",
+        "단어",
+        "용어",
+        "를",
+        "을",
+        "은",
+        "는",
+        "?",
+    ):
+        source = source.replace(token, " ")
+    source = re.sub(r"\s+", " ", source).strip()
+    if re.search(r"(요|니다|습니까|까요|해줘|해주세요)$", source):
+        return False
+    return bool(source) and len(source) <= 40 and len(source.split()) <= 4
+
+
+_CODE_FENCE_LANGUAGES = {
+    "bash",
+    "c",
+    "cpp",
+    "css",
+    "go",
+    "html",
+    "java",
+    "javascript",
+    "js",
+    "jsx",
+    "kotlin",
+    "kt",
+    "php",
+    "python",
+    "py",
+    "rb",
+    "rs",
+    "rust",
+    "scss",
+    "sh",
+    "shell",
+    "sql",
+    "swift",
+    "tsx",
+    "typescript",
+    "ts",
+    "zsh",
+}
+
+
+def _is_comment_line(text: str) -> bool:
+    return text.startswith(("#", "//", "/*", "*", "--"))
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
