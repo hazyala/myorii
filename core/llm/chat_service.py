@@ -5,7 +5,7 @@ from collections.abc import Iterator
 from core.llm.attachments import AttachmentContext, AttachmentRouter
 from core.llm.contracts import ChatAttachmentPayload, ChatMessagePayload, ChatRequest
 from core.llm.ollama_client import ModelNotFound, OllamaClient, OllamaNotRunning
-from core.llm.router import InstantRouter, IntentRouter, ModelRouter, PromptProfileResolver, ResponseFormatter
+from core.llm.router import IntentRouter, ModelRouter, PromptProfileResolver, ResponseFormatter
 
 
 DEFAULT_MODEL = "qwen3-vl:4b"
@@ -22,9 +22,8 @@ class ChatService:
     def __init__(self, model: str = DEFAULT_MODEL, client: OllamaClient | None = None) -> None:
         self._model = model
         self._client = client or OllamaClient()
-        self._instant_router = InstantRouter()
         self._intent_router = IntentRouter()
-        self._model_router = ModelRouter(vision_model=self._model)
+        self._model_router = ModelRouter()
         self._prompt_profile_resolver = PromptProfileResolver()
         self._response_formatter = ResponseFormatter()
         self._attachment_router = AttachmentRouter()
@@ -37,7 +36,10 @@ class ChatService:
 
     def set_model(self, model: str) -> None:
         self._model = model or DEFAULT_MODEL
-        self._model_router = ModelRouter(vision_model=self._model)
+        self._model_router = ModelRouter()
+
+    def warmup(self) -> None:
+        self._client.warmup(self._model)
 
     def available_models(self) -> list[str]:
         models = self._list_models_cached()
@@ -65,19 +67,6 @@ class ChatService:
             history=tuple(self._messages),
             user_message=user_message,
         )
-
-        instant_response = self._instant_router.match(request)
-        if instant_response is not None:
-            self._messages.append(user_message)
-            self._messages.append(
-                ChatMessagePayload(
-                    role="assistant",
-                    content=instant_response.content,
-                    metadata={"intent": instant_response.intent, "route": "instant"},
-                )
-            )
-            yield instant_response.content
-            return
 
         route = self._intent_router.route(request)
         system_prompt = self._prompt_profile_resolver.resolve(route.intent)

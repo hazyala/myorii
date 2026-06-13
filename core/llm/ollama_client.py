@@ -55,11 +55,22 @@ class OllamaClient:
                 names.append(str(name))
         return names
 
+    def warmup(self, model: str) -> None:
+        try:
+            self._client.chat(model=model, messages=[], stream=False, keep_alive="30m")
+        except Exception as exc:
+            raise OllamaNotRunning("Ollama가 실행 중이 아니에요") from exc
+
     def stream_chat(self, model: str, messages: list[ChatMessagePayload]) -> Iterator[str]:
         ollama_messages = self._to_ollama_messages(messages)
 
         try:
-            stream = self._client.chat(model=model, messages=ollama_messages, stream=True, think=False)
+            stream = self._client.chat(
+                model=model,
+                messages=ollama_messages,
+                stream=True,
+                keep_alive="30m",
+            )
             for chunk in stream:
                 content = self._value(self._value(chunk, "message", {}), "content", "")
                 if content:
