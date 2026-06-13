@@ -52,7 +52,7 @@ Myorii는 메뉴바 및 시스템 트레이에 상주하며,
 * 라우터, 의도별 프롬프트, 모델 선택, 첨부 처리, 응답 포맷터 설계 문서화
 * 이미지 첨부 `ImageHandler`, 텍스트 첨부 `TextHandler`, CSV/TSV 첨부 `CsvHandler` 구현
 * PDF/DOCX/XLSX/PPTX 첨부 handler 구현
-* 텍스트/CSV/PDF/DOCX/XLSX/PPTX 첨부 context를 `ChatService` user message에 연결
+* 텍스트/CSV/PDF/DOCX/XLSX/PPTX 첨부파일 참고 내용을 `ChatService` user message에 연결
 * Header `×` 닫기 버튼 구현
 * 채팅 입력 Enter/Shift+Enter 동작, 자동 줄바꿈, 채팅 영역 단독 스크롤 구현
 * PyInstaller frozen 실행에서 로컬 `platform/` 패키지와 표준 라이브러리 `platform.py` 충돌 보정

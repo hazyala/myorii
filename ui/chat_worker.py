@@ -10,7 +10,7 @@ from core.llm.contracts import ChatAttachmentPayload
 
 class ChatWorker(QObject):
     token = pyqtSignal(str)
-    finished = pyqtSignal()
+    finished = pyqtSignal(str)
     error = pyqtSignal(str)
 
     def __init__(self, chat_service: ChatService) -> None:
@@ -36,11 +36,13 @@ class ChatWorker(QObject):
 
     def _run(self, text: str, attachments: tuple[ChatAttachmentPayload, ...]) -> None:
         try:
+            generated_text = ""
             for token in self._chat_service.send(text, attachments):
                 if self._stop_requested:
                     break
+                generated_text += token
                 self.token.emit(token)
-            self.finished.emit()
+            self.finished.emit(generated_text)
         except Exception as exc:
             self.error.emit(str(exc))
 
