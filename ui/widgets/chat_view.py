@@ -60,7 +60,7 @@ SUPPORTED_ATTACHMENT_EXTENSIONS = {
 }
 DRAG_AUTOSCROLL_MARGIN = 56
 DRAG_AUTOSCROLL_MAX_STEP = 18
-MAX_ATTACHMENT_COUNT = 5
+MAX_ATTACHMENT_COUNT = 1
 MAX_TOTAL_ATTACHMENT_BYTES = 5 * 1024 * 1024
 
 
@@ -622,7 +622,7 @@ class ChatView(QWidget):
         current_size = self._total_attachment_size(self._attachments)
         candidate_size = self._total_attachment_size(candidates)
         if candidates and len(self._attachments) + len(candidates) > MAX_ATTACHMENT_COUNT:
-            self._show_error(f"첨부파일은 한 번에 최대 {MAX_ATTACHMENT_COUNT}개까지 추가할 수 있습니다.")
+            self._show_error("첨부파일은 한 번에 1개만 추가할 수 있습니다.")
         elif candidates and current_size + candidate_size > MAX_TOTAL_ATTACHMENT_BYTES:
             self._show_error(
                 "첨부파일 용량이 커서 추가할 수 없습니다. "

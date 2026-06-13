@@ -17,7 +17,7 @@
 | ATTACH-NORMAL-007 | `normal/sample.tsv` | CsvHandler | 성공 | 첨부한 TSV 파일의 컬럼명과 샘플 행을 요약해줘. | 컬럼명 5개와 샘플 데이터 행 인식 확인 |
 | ATTACH-NORMAL-008 | `normal/sample.png` | ImageHandler | 성공 | 첨부한 이미지에 적힌 텍스트를 읽어줘. | 이미지 라벨 `sample.png - ImageHandler test` 인식 확인 |
 | ATTACH-NORMAL-009 | `normal/sample.jpg` | ImageHandler | 성공 | 첨부한 이미지 3줄로 설명해줘. | JPG 이미지 라벨과 ImageHandler 테스트 목적 인식 확인 |
-| ATTACH-NORMAL-010 | `normal/sample.jpeg` | ImageHandler | 성공 | 첨부한 이미지에 적힌 텍스트를 읽어줘. | 새 세션에서 이미지 라벨 `sample.jpeg - ImageHandler test` 인식 확인. context 초과 시 대화 누적/첨부 용량 초과를 구분한 사용자용 메시지 표시 확인 |
+| ATTACH-NORMAL-010 | `normal/sample.jpeg` | ImageHandler | 성공 | 첨부한 이미지에 적힌 텍스트를 읽어줘. | 새 세션에서 이미지 라벨 `sample.jpeg - ImageHandler test` 인식 확인. 응답 용량 초과 시 대화 누적/첨부 용량 초과를 구분한 사용자용 메시지 표시 확인 |
 | ATTACH-NORMAL-011 | `normal/sample.gif` | ImageHandler | 이슈 발견 | 첨부한 이미지 분석해서 어떤건지 요약해줘. | GIF 이미지 라벨과 테스트 목적은 인식했으나, 요청하지 않은 코드 예시와 분리된 코드블록이 함께 출력됨 |
 | ATTACH-NORMAL-012 | `normal/sample.bmp` | ImageHandler | 성공 | 첨부한 이미지에 적힌 텍스트를 읽어줘. | 이미지 라벨 `sample.bmp - ImageHandler test` 인식 확인 |
 | ATTACH-NORMAL-013 | `normal/sample.pdf` | PdfHandler | 성공 | 첨부한 PDF의 페이지별 핵심 내용을 요약해줘. | `pypdf` 누락/fallback 오진 없이 PDF 텍스트 추출 경로가 동작함. 동일 답변 반복, 추출 텍스트 과해석, 코드블록 카드 분리 렌더링은 응답/렌더링 안정성 항목에서 별도 처리 |

@@ -9,6 +9,9 @@ from core.llm.router import InstantRouter, IntentRouter, ModelRouter, PromptProf
 
 
 DEFAULT_MODEL = "qwen3-vl:4b"
+MAX_ATTACHMENT_CONTEXT_CHARS = 3600
+ATTACHMENT_CONTEXT_TRUNCATION_NOTICE = "\n[일부 생략: 내용이 많거나 복잡한 첨부파일은 일부 내용만 참고할 수 있습니다.]"
+ATTACHMENT_CONTEXT_HEADER = "첨부파일 참고 내용:"
 
 
 class ChatService:
@@ -148,8 +151,26 @@ class ChatService:
 
     @staticmethod
     def _format_attachment_contexts(contexts: tuple[AttachmentContext, ...]) -> str:
-        sections = "\n\n".join(context.to_prompt_section() for context in contexts)
-        return f"첨부 context:\n{sections}"
+        if not contexts:
+            return ATTACHMENT_CONTEXT_HEADER
+
+        separator_chars = max(0, len(contexts) - 1) * 2
+        available = max(0, MAX_ATTACHMENT_CONTEXT_CHARS - len(ATTACHMENT_CONTEXT_HEADER) - 1 - separator_chars)
+        section_budget = max(1, available // len(contexts))
+        sections = "\n\n".join(
+            ChatService._truncate_attachment_section(context.to_prompt_section(), section_budget)
+            for context in contexts
+        )
+        return f"{ATTACHMENT_CONTEXT_HEADER}\n{sections}"
+
+    @staticmethod
+    def _truncate_attachment_section(section: str, limit: int) -> str:
+        if len(section) <= limit:
+            return section
+        notice = ATTACHMENT_CONTEXT_TRUNCATION_NOTICE
+        if limit <= len(notice):
+            return section[:limit].rstrip()
+        return section[: limit - len(notice)].rstrip() + notice
 
     def _list_models_cached(self) -> list[str]:
         if self._model_cache is not None:

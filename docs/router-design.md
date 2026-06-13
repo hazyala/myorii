@@ -471,7 +471,7 @@ LocalStore
 * 현재 이미지 base64 변환은 `ImageHandler`가 담당
 * `TextHandler`: `txt`, `md`, `json`, `yaml`, `yml` 본문 일부 추출
 * `CsvHandler`: `csv`, `tsv` 컬럼명과 샘플 행 요약
-* `ChatService`: 첨부 context를 user message 본문과 metadata에 추가
+* `ChatService`: 첨부파일 참고 내용을 user message 본문과 metadata에 추가
 * `PdfHandler`: 일부 페이지 텍스트 추출, 스캔/OCR/표 구조 분석 제외
 * `DocumentHandler`: `docx` 문단/표 텍스트 일부 추출
 * `SpreadsheetHandler`: 시트명, 컬럼명, 샘플 행 요약
