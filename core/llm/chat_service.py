@@ -42,7 +42,10 @@ class ChatService:
         self._client.warmup(self._model)
 
     def available_models(self) -> list[str]:
-        models = self._list_models_cached()
+        try:
+            models = self._list_models_cached()
+        except OllamaNotRunning:
+            return [DEFAULT_MODEL]
         return [DEFAULT_MODEL, *(model for model in models if model != DEFAULT_MODEL)]
 
     def clear(self) -> None:
@@ -175,8 +178,5 @@ class ChatService:
         if self._model_cache is not None:
             return self._model_cache
 
-        try:
-            self._model_cache = self._client.list_models()
-        except OllamaNotRunning:
-            return []
+        self._model_cache = self._client.list_models()
         return self._model_cache
