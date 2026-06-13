@@ -95,16 +95,86 @@ class ResponseFormatter:
     def _format_code_generation(self, text: str, request: ChatRequest) -> str:
         blocks = self._extract_code_blocks(text)
         if blocks:
+            with_context = self._format_code_blocks_with_context(text, request)
+            if with_context:
+                return with_context
             return "\n\n".join(
                 f"```{language or self._language_for_code_request(request.user_message.content)}\n{code}\n```"
                 for language, code in blocks
             )
 
         language = self._language_for_code_request(request.user_message.content)
+        with_context = self._format_likely_code_with_context(text, language)
+        if with_context:
+            return with_context
         code = self._extract_likely_code(text)
         if code:
             return f"```{language}\n{code}\n```"
         return text
+
+    def _format_code_blocks_with_context(self, text: str, request: ChatRequest) -> str:
+        pattern = re.compile(r"```([a-zA-Z0-9_-]*)\n(.*?)```", flags=re.DOTALL)
+        position = 0
+        parts: list[str] = []
+        text_found = False
+
+        for match in pattern.finditer(text):
+            before = self._clean_context_text(text[position : match.start()])
+            if before:
+                text_found = True
+                parts.append(before)
+
+            language = match.group(1) or self._language_for_code_request(request.user_message.content)
+            code = match.group(2).strip()
+            if code:
+                parts.append(f"```{language}\n{code}\n```")
+            position = match.end()
+
+        after = self._clean_context_text(text[position:])
+        if after:
+            text_found = True
+            parts.append(after)
+
+        if not text_found:
+            return ""
+        return "\n\n".join(parts)
+
+    def _format_likely_code_with_context(self, text: str, language: str) -> str:
+        lines = text.strip().splitlines()
+        code_indexes = [index for index, line in enumerate(lines) if _looks_like_code_or_command(line)]
+        if not code_indexes:
+            return ""
+
+        start = code_indexes[0]
+        end = code_indexes[-1] + 1
+        before = self._clean_context_text("\n".join(lines[:start]))
+        code = "\n".join(lines[start:end]).strip()
+        after = self._clean_context_text("\n".join(lines[end:]))
+        if not before and not after:
+            return ""
+        if not code:
+            return ""
+
+        parts = []
+        if before:
+            parts.append(before)
+        parts.append(f"```{language}\n{code}\n```")
+        if after:
+            parts.append(after)
+        return "\n\n".join(parts)
+
+    @staticmethod
+    def _clean_context_text(text: str) -> str:
+        paragraphs: list[str] = []
+        for paragraph in re.split(r"\n{2,}", text.strip()):
+            lines = []
+            for line in paragraph.splitlines():
+                cleaned = re.sub(r"^\s*\d+[.)]\s*", "", line.strip())
+                if cleaned:
+                    lines.append(cleaned)
+            if lines:
+                paragraphs.append(" ".join(lines))
+        return "\n\n".join(paragraphs)
 
     def _format_single_snippet(self, text: str) -> str:
         blocks = self._extract_code_blocks(text)
@@ -414,6 +484,8 @@ def _looks_like_code_or_command(text: str) -> bool:
         return True
     declaration = r"^(?:(?:public|private|protected|internal|static|final|abstract|sealed)\s+)*(async\s+def|def|class|interface|enum|struct|record|function|import|from|using|namespace)\b"
     if any(re.match(declaration, line) for line in lines):
+        return True
+    if any(re.match(r"^[A-Za-z_][A-Za-z0-9_.]*\(.*\)$", line) for line in lines):
         return True
     if any(re.match(r"^(select|insert|update|delete|with|create|alter|drop)\b", line, flags=re.IGNORECASE) for line in lines):
         return True

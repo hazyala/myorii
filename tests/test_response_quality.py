@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import os
 import unittest
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from core.llm.chat_service import ChatService, EmptyModelResponse
 from core.llm.contracts import ChatMessagePayload, ChatRequest
 from core.llm.ollama_client import OllamaClient
 from core.llm.router import IntentRouter, ModelRouter, ResponseFormatter
+from PyQt6.QtWidgets import QApplication
 from ui.widgets.message_bubble import MessageBubble
 
 
@@ -146,6 +150,87 @@ class ResponseQualityTest(unittest.TestCase):
         self.assertEqual(route.intent, "command")
         self.assertEqual(self.formatter.format("bash\nls", route.intent, request), "```bash\nls\n```")
 
+    def test_code_block_request_preserves_prose_code_prose_order(self) -> None:
+        request = self._request(
+            "파이썬 리스트 중복 제거 예시를 아래 순서로 답변해줘.\n\n"
+            "1. 한 문장 설명\n"
+            "2. python 코드블록\n"
+            "3. 한 문장 주의점\n\n"
+            "코드는 아래 내용만 사용해줘.\n\n"
+            "items = [1, 2, 2, 3]\n"
+            "unique_items = list(dict.fromkeys(items))\n"
+            "print(unique_items)"
+        )
+        output = (
+            "리스트 중복 요소를 제거하고 원래 순서를 유지하는 방법입니다.\n"
+            "items = [1, 2, 2, 3]\n"
+            "unique_items = list(dict.fromkeys(items))\n"
+            "print(unique_items)\n"
+            "해시 가능한 데이터만 사용해야 합니다."
+        )
+        route = self.router.route(request)
+        formatted = self.formatter.format(output, route.intent, request)
+
+        self.assertEqual(route.intent, "code_generation")
+        self.assertEqual(
+            formatted,
+            "리스트 중복 요소를 제거하고 원래 순서를 유지하는 방법입니다.\n\n"
+            "```python\nitems = [1, 2, 2, 3]\nunique_items = list(dict.fromkeys(items))\nprint(unique_items)\n```\n\n"
+            "해시 가능한 데이터만 사용해야 합니다.",
+        )
+
+    def test_numbered_code_block_response_is_normalized_to_requested_order(self) -> None:
+        request = self._request(
+            "파이썬 리스트 중복 제거 예시를 아래 순서로 답변해줘.\n\n"
+            "1. 한 문장 설명\n"
+            "2. python 코드블록\n"
+            "3. 한 문장 주의점\n\n"
+            "코드는 아래 내용만 사용해줘.\n\n"
+            "items = [1, 2, 2, 3]\n"
+            "unique_items = list(dict.fromkeys(items))\n"
+            "print(unique_items)"
+        )
+        output = (
+            "1. 리스트를 딕셔너리 키로 변환해 중복 제거하고\n"
+            "   순서 유지하는 방법\n"
+            "items = [1, 2, 2, 3]\n"
+            "unique_items = list(dict.fromkeys(items))\n"
+            "print(unique_items)\n"
+            "3. Python 3.6 이상에서만 순서를 유지합니다"
+        )
+        route = self.router.route(request)
+        formatted = self.formatter.format(output, route.intent, request)
+
+        self.assertEqual(route.intent, "code_generation")
+        self.assertEqual(
+            formatted,
+            "리스트를 딕셔너리 키로 변환해 중복 제거하고 순서 유지하는 방법\n\n"
+            "```python\nitems = [1, 2, 2, 3]\nunique_items = list(dict.fromkeys(items))\nprint(unique_items)\n```\n\n"
+            "Python 3.6 이상에서만 순서를 유지합니다",
+        )
+
+    def test_code_generation_keeps_prose_around_existing_code_fence(self) -> None:
+        request = self._request(
+            "파이썬 리스트 중복 제거 예시를 아래 순서로 답변해줘.\n\n"
+            "1. 한 문장 설명\n"
+            "2. python 코드블록\n"
+            "3. 한 문장 주의점"
+        )
+        output = (
+            "리스트 중복 요소를 제거하고 원래 순서를 유지하는 방법입니다.\n\n"
+            "```python\n"
+            "items = [1, 2, 2, 3]\n"
+            "unique_items = list(dict.fromkeys(items))\n"
+            "print(unique_items)\n"
+            "```\n\n"
+            "해시 가능한 데이터만 사용해야 합니다."
+        )
+        route = self.router.route(request)
+        formatted = self.formatter.format(output, route.intent, request)
+
+        self.assertEqual(route.intent, "code_generation")
+        self.assertEqual(formatted, output)
+
     def test_markdown_renderer_preserves_text_after_code_order(self) -> None:
         self.assertTrue(
             MessageBubble._should_preserve_markdown_order(
@@ -155,6 +240,41 @@ class ResponseQualityTest(unittest.TestCase):
                     ("text", "주의점입니다."),
                 ]
             )
+        )
+
+    def test_message_bubble_renders_text_code_text_in_layout_order(self) -> None:
+        app = QApplication.instance() or QApplication([])
+        self.addCleanup(app.processEvents)
+        bubble = MessageBubble(
+            "assistant",
+            "리스트 중복 요소를 제거하고 원래 순서를 유지하는 방법입니다.\n\n"
+            "```python\n"
+            "items = [1, 2, 2, 3]\n"
+            "unique_items = list(dict.fromkeys(items))\n"
+            "print(unique_items)\n"
+            "```\n\n"
+            "해시 가능한 데이터만 사용해야 합니다.",
+        )
+
+        bubble.render_markdown()
+
+        rendered_types = [
+            type(bubble._bubble_layout.itemAt(index).widget()).__name__
+            for index in range(bubble._bubble_layout.count())
+            if bubble._bubble_layout.itemAt(index).widget().isVisibleTo(bubble)
+        ]
+        self.assertEqual(rendered_types, ["CodeTextBrowser", "CodeBlockWidget", "CodeTextBrowser"])
+        self.assertEqual(
+            bubble._body.toPlainText(),
+            "리스트 중복 요소를 제거하고 원래 순서를 유지하는 방법입니다.",
+        )
+        self.assertEqual(
+            [block._code for block in bubble._rendered_code_blocks],
+            ["items = [1, 2, 2, 3]\nunique_items = list(dict.fromkeys(items))\nprint(unique_items)"],
+        )
+        self.assertEqual(
+            [block.toPlainText() for block in bubble._rendered_text_blocks],
+            ["해시 가능한 데이터만 사용해야 합니다."],
         )
 
     def test_code_generation_uses_selected_model_not_fast_text_model(self) -> None:

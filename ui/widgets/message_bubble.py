@@ -320,6 +320,7 @@ class MessageBubble(QWidget):
         self._attachment_container: QWidget | None = None
         self._attachment_rows_layout: QVBoxLayout | None = None
         self._rendered_code_blocks: list[CodeBlockWidget] = []
+        self._rendered_text_blocks: list[CodeTextBrowser] = []
         self.setObjectName(f"{role}MessageRow")
 
         row = QHBoxLayout(self)
@@ -412,6 +413,8 @@ class MessageBubble(QWidget):
         if isinstance(self._body, QLabel):
             self._body.setFixedWidth(self._user_body_width(body_width))
         self._layout_attachment_previews(body_width)
+        for text_block in self._rendered_text_blocks:
+            self._sync_text_browser_height(text_block, body_width)
         for block in self._rendered_code_blocks:
             block.update_width(body_width)
         self._sync_height()
@@ -454,7 +457,8 @@ class MessageBubble(QWidget):
 
     def _set_plain_text(self, text: str) -> None:
         if isinstance(self._body, QTextBrowser):
-            self._clear_code_blocks()
+            self._clear_rendered_blocks()
+            self._body.show()
             self._body.setPlainText(text)
             if isinstance(self._body, CodeTextBrowser):
                 self._body.set_code_ranges([])
@@ -512,10 +516,16 @@ class MessageBubble(QWidget):
             self._body.adjustSize()
             return
 
-        document = self._body.document()
-        document.setTextWidth(body_width)
+        self._sync_text_browser_height(self._body, body_width)
+        for text_block in self._rendered_text_blocks:
+            self._sync_text_browser_height(text_block, body_width)
+
+    @staticmethod
+    def _sync_text_browser_height(browser: QTextBrowser, width: int) -> None:
+        document = browser.document()
+        document.setTextWidth(width)
         height = max(22, int(document.size().height()) + 2)
-        self._body.setFixedSize(body_width, height)
+        browser.setFixedSize(width, height)
 
     def _build_indicator(self) -> QWidget:
         indicator = QWidget()
@@ -561,33 +571,77 @@ class MessageBubble(QWidget):
         return ranges
 
     def _render_markdown_blocks(self) -> None:
-        self._clear_code_blocks()
+        self._clear_rendered_blocks()
         if not isinstance(self._body, CodeTextBrowser):
             return
 
         segments = self._markdown_segments()
-        if self._should_preserve_markdown_order(segments):
+        if not any(kind == "code" for kind, _text in segments):
+            self._body.show()
             self._body.setMarkdown(self._text)
             self._body.set_code_ranges(self._code_ranges())
             return
 
-        text_parts = [text for kind, text in segments if kind == "text" and text.strip()]
-        self._body.setMarkdown("\n\n".join(text_parts))
+        self._body.clear()
         self._body.set_code_ranges([])
+        body_used = False
         for kind, text in segments:
-            if kind != "code":
+            if kind == "text":
+                if not text.strip():
+                    continue
+                if not body_used:
+                    self._body.show()
+                    self._body.setMarkdown(text.strip())
+                    body_used = True
+                    continue
+                text_block = self._build_text_block(text.strip())
+                self._rendered_text_blocks.append(text_block)
+                self._insert_rendered_widget(text_block)
                 continue
+
             block = CodeBlockWidget(text)
             block.code_copied.connect(self.code_copied.emit)
             block.update_width(self._body_width())
             self._rendered_code_blocks.append(block)
-            self._bubble_layout.addWidget(block)
+            self._insert_rendered_widget(block)
 
-    def _clear_code_blocks(self) -> None:
+        if not body_used:
+            self._body.hide()
+
+    def _build_text_block(self, text: str) -> CodeTextBrowser:
+        block = CodeTextBrowser()
+        block.setFrameShape(QFrame.Shape.NoFrame)
+        block.setOpenExternalLinks(True)
+        block.setReadOnly(True)
+        block.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        block.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        block.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        block.document().setDocumentMargin(0)
+        block.setMarkdown(text)
+        block.set_code_ranges([])
+        block.code_copied.connect(self.code_copied.emit)
+        self._sync_text_browser_height(block, self._body_width())
+        return block
+
+    def _insert_rendered_widget(self, widget: QWidget) -> None:
+        if self._indicator is None:
+            self._bubble_layout.addWidget(widget)
+            return
+        indicator_index = self._bubble_layout.indexOf(self._indicator)
+        if indicator_index < 0:
+            self._bubble_layout.addWidget(widget)
+            return
+        self._bubble_layout.insertWidget(indicator_index, widget)
+
+    def _clear_rendered_blocks(self) -> None:
         for block in self._rendered_code_blocks:
             self._bubble_layout.removeWidget(block)
             block.deleteLater()
         self._rendered_code_blocks.clear()
+        for block in self._rendered_text_blocks:
+            self._bubble_layout.removeWidget(block)
+            block.deleteLater()
+        self._rendered_text_blocks.clear()
 
     @staticmethod
     def _should_preserve_markdown_order(segments: list[tuple[str, str]]) -> bool:
