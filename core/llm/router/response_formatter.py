@@ -29,7 +29,7 @@ class ResponseFormatter:
         if intent.startswith("naming_"):
             return self._format_code_candidates(cleaned, request, language=self._language_for_naming(intent, request))
         if intent == "commit_message":
-            return self._format_code_candidates(cleaned, request, language="text")
+            return self._format_commit_message(cleaned)
         if intent == "translate":
             return self._format_translation(cleaned, request)
         if intent == "command":
@@ -63,11 +63,21 @@ class ResponseFormatter:
             return blocks
         return "가장 무난한 후보입니다.\n\n" + blocks
 
+    def _format_commit_message(self, text: str) -> str:
+        candidates: list[str] = []
+        for _language, code in self._extract_code_blocks(text):
+            candidates.extend(_clean_commit_line(line) for line in code.splitlines())
+        candidates.extend(_clean_commit_line(line) for line in text.splitlines())
+        candidates = _dedupe([candidate for candidate in candidates if candidate])
+        if not candidates:
+            return text
+        return "\n\n".join(f"```text\n{candidate}\n```" for candidate in candidates[:3])
+
     def _format_translation(self, text: str, request: ChatRequest) -> str:
         if not _is_short_translation_request(request.user_message.content):
             return text
 
-        translated = self._first_result_line(text)
+        translated = self._first_translation_result(text)
         if not translated:
             return text
         if "\n" in translated or len(translated) > 80:
@@ -297,6 +307,22 @@ class ResponseFormatter:
         return ""
 
     @staticmethod
+    def _first_translation_result(text: str) -> str:
+        text = ResponseFormatter._unwrap_translation_code_fence(text)
+        for line in text.splitlines():
+            candidate = _clean_translation_line(line)
+            if candidate:
+                return candidate
+        return ""
+
+    @staticmethod
+    def _unwrap_translation_code_fence(text: str) -> str:
+        match = re.fullmatch(r"\s*```[a-zA-Z0-9_-]*\n(.*?)\n?```\s*", text, flags=re.DOTALL)
+        if not match:
+            return text
+        return match.group(1).strip()
+
+    @staticmethod
     def _language_for_code_request(text: str) -> str:
         normalized = text.lower()
         if "sql" in normalized or "쿼리" in normalized:
@@ -400,11 +426,49 @@ def _clean_candidate(text: str) -> str:
     candidate = re.sub(r"^[-*]\s+", "", candidate)
     candidate = re.sub(r"^\d+[.)]\s+", "", candidate)
     candidate = candidate.strip("` ")
+    candidate = re.sub(r"\s+#.*$", "", candidate).strip()
     if " - " in candidate and not _is_shell_command(candidate):
         candidate = candidate.split(" - ", 1)[0].strip()
+    match = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*.+$", candidate)
+    if match:
+        return match.group(1).strip()
     if ": " in candidate and not candidate.startswith(("feat:", "fix:", "ui:", "refactor:", "docs:", "chore:")):
         candidate = candidate.split(": ", 1)[0].strip()
     return candidate
+
+
+def _clean_translation_line(text: str) -> str:
+    candidate = text.strip()
+    candidate = re.sub(r"^[-*]\s+", "", candidate)
+    candidate = re.sub(r"^\d+[.)]\s+", "", candidate)
+    candidate = candidate.strip("` ")
+    if not candidate:
+        return ""
+
+    if candidate.lower() in {"text", "txt", "translation", "result", "output", "answer"}:
+        return ""
+
+    for label in ("translation", "result", "answer", "english", "korean", "japanese", "번역", "결과", "답"):
+        match = re.match(rf"^{label}\s*[:：]\s*(.+)$", candidate, flags=re.IGNORECASE)
+        if match:
+            candidate = match.group(1).strip()
+            break
+
+    candidate = candidate.strip("`'\"“”‘’ ")
+    if not candidate or candidate.lower() in {"text", "txt"}:
+        return ""
+    return candidate
+
+
+def _clean_commit_line(text: str) -> str:
+    candidate = text.strip()
+    candidate = re.sub(r"^[-*]\s+", "", candidate)
+    candidate = re.sub(r"^\d+[.)]\s+", "", candidate)
+    candidate = candidate.strip("`'\"“”‘’ ")
+    match = re.match(r"^(feat|fix|ui|refactor|docs|chore)(?:\([^)]+\))?:\s+(.+)$", candidate)
+    if not match:
+        return ""
+    return f"{match.group(1)}: {match.group(2).strip()}"
 
 
 def _clean_command_line(text: str) -> str:

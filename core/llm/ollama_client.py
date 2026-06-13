@@ -29,6 +29,9 @@ class InvalidImageAttachment(OllamaError):
     pass
 
 
+OLLAMA_NOT_RUNNING_MESSAGE = "Ollama가 실행 중이 아니에요. Ollama를 실행한 뒤 다시 시도해주세요."
+
+
 class OllamaClient:
     def __init__(self, host: str | None = None) -> None:
         self._client = ollama.Client(host=host) if host else ollama.Client()
@@ -45,7 +48,7 @@ class OllamaClient:
         try:
             response = self._client.list()
         except Exception as exc:
-            raise OllamaNotRunning("Ollama가 실행 중이 아니에요") from exc
+            raise OllamaNotRunning(OLLAMA_NOT_RUNNING_MESSAGE) from exc
 
         models = self._value(response, "models", [])
         names: list[str] = []
@@ -55,11 +58,22 @@ class OllamaClient:
                 names.append(str(name))
         return names
 
+    def warmup(self, model: str) -> None:
+        try:
+            self._client.chat(model=model, messages=[], stream=False, keep_alive="30m")
+        except Exception as exc:
+            raise OllamaNotRunning(OLLAMA_NOT_RUNNING_MESSAGE) from exc
+
     def stream_chat(self, model: str, messages: list[ChatMessagePayload]) -> Iterator[str]:
         ollama_messages = self._to_ollama_messages(messages)
 
         try:
-            stream = self._client.chat(model=model, messages=ollama_messages, stream=True, think=False)
+            stream = self._client.chat(
+                model=model,
+                messages=ollama_messages,
+                stream=True,
+                keep_alive="30m",
+            )
             for chunk in stream:
                 content = self._value(self._value(chunk, "message", {}), "content", "")
                 if content:
@@ -76,7 +90,7 @@ class OllamaClient:
                 ) from exc
             raise OllamaError(str(exc)) from exc
         except Exception as exc:
-            raise OllamaNotRunning("Ollama가 실행 중이 아니에요") from exc
+            raise OllamaNotRunning(OLLAMA_NOT_RUNNING_MESSAGE) from exc
 
     @staticmethod
     def _value(data: Any, key: str, default: Any = None) -> Any:

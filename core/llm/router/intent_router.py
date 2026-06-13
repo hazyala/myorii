@@ -86,6 +86,17 @@ class IntentRouter:
         ("naming_env", ("환경변수", "env name", "environment variable")),
         ("naming_css_class", ("css 클래스", "css class")),
     )
+    _BARE_NAMING_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
+        ("naming_function", ("함수", "function")),
+        ("naming_method", ("메서드", "메소드", "method")),
+        ("naming_variable", ("변수", "variable")),
+        ("naming_constant", ("상수", "constant")),
+        ("naming_class", ("클래스", "class")),
+        ("naming_file", ("파일", "filename", "file")),
+        ("naming_folder", ("폴더", "디렉토리", "folder", "directory")),
+        ("naming_component", ("컴포넌트", "component")),
+        ("naming_branch", ("브랜치", "branch")),
+    )
 
     def route(self, request: ChatRequest) -> IntentRoute:
         attachment_route = self._route_attachment(request)
@@ -152,6 +163,11 @@ class IntentRouter:
         for intent, keywords in self._NAMING_PATTERNS:
             if self._contains_any(text, keywords):
                 return IntentRoute(intent=intent, reason="naming_keyword")
+
+        if self._contains_any(text, ("추천", "지어", "이름", "name", "naming", "만들어", "뭐가 좋아")):
+            for intent, keywords in self._BARE_NAMING_PATTERNS:
+                if self._contains_any(text, keywords):
+                    return IntentRoute(intent=intent, reason="bare_naming_keyword")
 
         if not self._contains_any(text, ("추천", "지어", "이름", "name", "naming", "만들어", "뭐가 좋아")):
             return None

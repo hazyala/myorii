@@ -238,7 +238,7 @@ Myorii 아이콘 사용
 
 첨부 파일은 `jpg`, `jpeg`, `png`, `gif`, `bmp`, `txt`, `md`, `csv`, `tsv`, `json`, `yaml`, `yml`, `pdf`, `docx`, `xlsx`, `pptx` 확장자 기반으로 선택, 드롭, 미리보기를 지원한다. 지원하지 않는 파일을 선택하거나 드롭하면 Assistant 메시지 영역에 지원하지 않는 파일 형식 오류를 표시한다.
 
-현재 모델 입력까지 실제 내용을 전달하는 첨부 형식은 이미지, 텍스트 계열, CSV/TSV, PDF, DOCX, XLSX, PPTX 파일이다. 이미지는 vision 모델 요청의 이미지 payload로 전달하고, `TextHandler`, `CsvHandler`, `PdfHandler`, `DocxHandler`, `XlsxHandler`, `PptxHandler`가 만든 context는 user message 본문과 metadata에 추가한다. PDF는 일부 페이지 텍스트만 읽으며 스캔/OCR/표 구조 분석은 제외한다. DOCX는 문단/표 텍스트 일부만 읽으며 서식, 이미지, 주석, 변경 추적은 제외한다. XLSX는 시트명, 컬럼명, 샘플 행만 읽으며 전체 행 분석, 수식 재계산, 피벗/차트/서식 분석은 제외한다. PPTX는 슬라이드별 텍스트만 읽으며 PPT 제작, 디자인 생성, 이미지/차트/표 구조, 발표자 노트, 수치 계산은 제외한다.
+현재 모델 입력까지 실제 내용을 전달하는 첨부 형식은 이미지, 텍스트 계열, CSV/TSV, PDF, DOCX, XLSX, PPTX 파일이다. 이미지는 단일 `qwen3-vl:4b-instruct` 모델 요청의 이미지 payload로 전달하고, `TextHandler`, `CsvHandler`, `PdfHandler`, `DocxHandler`, `XlsxHandler`, `PptxHandler`가 만든 context는 user message 본문과 metadata에 추가한다. PDF는 일부 페이지 텍스트만 읽으며 스캔/OCR/표 구조 분석은 제외한다. DOCX는 문단/표 텍스트 일부만 읽으며 서식, 이미지, 주석, 변경 추적은 제외한다. XLSX는 시트명, 컬럼명, 샘플 행만 읽으며 전체 행 분석, 수식 재계산, 피벗/차트/서식 분석은 제외한다. PPTX는 슬라이드별 텍스트만 읽으며 PPT 제작, 디자인 생성, 이미지/차트/표 구조, 발표자 노트, 수치 계산은 제외한다.
 
 첨부 파일 미리보기 카드는 입력창 바로 위에 표시한다. 이미지 파일은 썸네일을 보여주고, 문서 파일은 확장자 배지를 보여준다. 파일명이 길 경우 카드 폭에 맞춰 끝부분을 말줄임 처리한다.
 
@@ -479,7 +479,7 @@ Notion 연동 버튼
 * 시작 시 Myorii 열기는 실제 스위치 버튼으로 배치되어 있다.
 * 테마는 라이트와 다크 중 하나를 선택하는 토글 버튼으로 배치되어 있다.
 * 언어는 한국어와 영어 중 하나를 선택하는 토글 버튼으로 배치되어 있다.
-* 기본 모델 선택은 Ollama 설치 모델을 표시하며, `qwen3-vl:4b`를 첫 항목으로 고정한다.
+* 기본 모델 선택은 Ollama 설치 모델을 표시하며, `qwen3-vl:4b-instruct`를 첫 항목으로 고정한다.
 * 모델 관리, 연동하기, 도움말, 피드백 보내기 버튼은 추후 기능 연결 예정이다.
 * 앱 종료 버튼만 실제 종료 동작에 연결되어 있다.
 

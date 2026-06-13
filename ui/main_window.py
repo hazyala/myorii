@@ -32,7 +32,7 @@ from PyQt6.QtWidgets import (
 
 from core.llm.chat_service import ChatService
 from ui.assets import asset_path, tinted_icon
-from ui.chat_worker import ModelListWorker
+from ui.chat_worker import ModelListWorker, ModelWarmupWorker
 from ui.settings_view import SettingsView
 from ui.widgets.chat_view import ChatView
 from ui.widgets.memo_view import MemoView
@@ -156,6 +156,7 @@ class MainWindow(QMainWindow):
         self._tabs_group = QButtonGroup(self)
         self._tabs_group.setExclusive(True)
         self._chat_service = ChatService()
+        self._model_warmup_worker = ModelWarmupWorker(self._chat_service)
         self._model_list_worker = ModelListWorker(self._chat_service)
         self._model_list_worker.models_loaded.connect(self._update_available_models)
         self._page_stack = QStackedWidget()
@@ -218,6 +219,7 @@ class MainWindow(QMainWindow):
         self._page_stack.addWidget(main_page)
         self._page_stack.addWidget(self._settings_view)
         self._page_stack.setCurrentWidget(main_page)
+        self._model_warmup_worker.start()
         self._model_list_worker.start()
 
         return root
