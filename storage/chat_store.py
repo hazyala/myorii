@@ -10,6 +10,7 @@ from storage.database import get_connection
 class ChatSession:
     id: int
     title: str
+    ord: float
     created_at: str
     updated_at: str
 
@@ -36,18 +37,20 @@ class ChatAttachment:
 
 def create_session(title: str = "새 대화") -> ChatSession:
     with get_connection() as conn:
+        row = conn.execute("SELECT MAX(ord) FROM chat_sessions").fetchone()
+        next_ord = (row[0] or 0.0) + 1.0
         cur = conn.execute(
-            "INSERT INTO chat_sessions (title) VALUES (?) RETURNING *",
-            (title,),
+            "INSERT INTO chat_sessions (title, ord) VALUES (?, ?) RETURNING *",
+            (title, next_ord),
         )
         return _row_to_session(cur.fetchone())
 
 
 def get_all_sessions() -> list[ChatSession]:
-    """최신 대화 순으로 반환"""
+    """사용자가 정렬한 순서로 전체 세션 반환"""
     with get_connection() as conn:
         rows = conn.execute(
-            "SELECT * FROM chat_sessions ORDER BY updated_at DESC"
+            "SELECT * FROM chat_sessions ORDER BY ord ASC, updated_at DESC, id DESC"
         ).fetchall()
     return [_row_to_session(r) for r in rows]
 
@@ -61,11 +64,25 @@ def update_session_title(session_id: int, title: str) -> None:
 
 
 def touch_session(session_id: int) -> None:
-    """메시지 추가될 때마다 호출 — 세션 목록 최신순 정렬용"""
+    """메시지 추가될 때마다 호출 — 최근 수정 시각 갱신용"""
     with get_connection() as conn:
         conn.execute(
             "UPDATE chat_sessions SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
             (session_id,),
+        )
+
+
+def reorder_many(session_ids: list[int]) -> None:
+    """현재 UI 순서대로 ord를 다시 정렬"""
+    with get_connection() as conn:
+        conn.executemany(
+            """
+            UPDATE chat_sessions
+            SET ord = ?,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            WHERE id = ?
+            """,
+            [(float(index + 1), session_id) for index, session_id in enumerate(session_ids)],
         )
 
 
@@ -142,6 +159,7 @@ def _row_to_session(row: object) -> ChatSession:
     return ChatSession(
         id=row["id"],
         title=row["title"],
+        ord=row["ord"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )
