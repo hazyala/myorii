@@ -325,7 +325,6 @@ class MainWindow(QMainWindow):
         layout.setSpacing(0)
 
         if object_name == "chatPanel":
-            layout.setContentsMargins(14, 14, 14, 14)
             layout.addWidget(self._chat_view, 1)
         elif object_name == "todoPanel":
             self._todo_view = TodoView()
@@ -643,6 +642,12 @@ QScrollBar::sub-line:vertical {
     font-weight: 700;
 }
 
+#chatHistoryCount {
+    color: #8c94a2;
+    font-size: 12px;
+    font-weight: 700;
+}
+
 #chatHistoryScrollArea {
     background: transparent;
     border: none;
@@ -665,13 +670,13 @@ QScrollBar::sub-line:vertical {
 
 #chatHistoryTitle {
     color: #11131a;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 750;
 }
 
 #chatHistoryBody {
     color: #737b88;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 500;
     line-height: 17px;
 }
@@ -679,7 +684,7 @@ QScrollBar::sub-line:vertical {
 #chatHistoryDate,
 #chatHistoryEmpty {
     color: #8c94a2;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
 }
 

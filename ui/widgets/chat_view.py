@@ -39,7 +39,7 @@ from PyQt6.QtWidgets import (
 import storage.chat_store as chat_store
 from core.llm.chat_service import ChatService
 from core.llm.contracts import ChatAttachmentPayload, ChatMessagePayload
-from ui.assets import asset_path, tinted_icon
+from ui.assets import asset_path
 from ui.chat_worker import ChatWorker
 from ui.widgets.message_bubble import MessageAttachment, MessageBubble
 from ui.widgets.switch_button import SwitchButton
@@ -421,24 +421,22 @@ class ChatHistoryView(QWidget):
         frame.setObjectName("chatHistoryHeader")
         layout = QHBoxLayout(frame)
         layout.setContentsMargins(17, 10, 17, 10)
-        layout.setSpacing(7)
+        layout.setSpacing(6)
 
         back = QPushButton("‹")
         back.setObjectName("chatHistoryBackButton")
-        back.setFixedSize(22, 22)
+        back.setFixedSize(20, 20)
         back.setCursor(Qt.CursorShape.PointingHandCursor)
         back.clicked.connect(self.back_requested.emit)
 
-        chat_icon = QLabel()
-        chat_icon.setFixedSize(20, 20)
-        chat_icon.setPixmap(tinted_icon("chat.png", QColor("#20242c"), QSize(17, 17)).pixmap(17, 17))
-
-        self._title_label = QLabel("채팅 기록 0")
+        self._title_label = QLabel("채팅 기록")
         self._title_label.setObjectName("chatHistoryHeaderTitle")
+        self._count_label = QLabel("0")
+        self._count_label.setObjectName("chatHistoryCount")
 
         layout.addWidget(back)
-        layout.addWidget(chat_icon)
         layout.addWidget(self._title_label)
+        layout.addWidget(self._count_label)
         layout.addStretch(1)
         return frame
 
@@ -448,7 +446,7 @@ class ChatHistoryView(QWidget):
         self._empty_label.setVisible(not sessions)
         for session in sessions:
             self._insert_item(session)
-        self._title_label.setText(f"채팅 기록 {len(sessions)}")
+        self._count_label.setText(str(len(sessions)))
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
@@ -677,7 +675,7 @@ class ChatView(QWidget):
         page = QWidget()
         page.setObjectName("chatConversationPage")
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(14, 14, 14, 14)
         layout.setSpacing(0)
         layout.addWidget(self._chat_scroll_area(), 1)
         layout.addWidget(self._input_panel())
