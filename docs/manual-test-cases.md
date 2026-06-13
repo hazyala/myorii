@@ -22,7 +22,7 @@
 | ATTACH-NORMAL-012 | `normal/sample.bmp` | ImageHandler | 성공 | 첨부한 이미지에 적힌 텍스트를 읽어줘. | 이미지 라벨 `sample.bmp - ImageHandler test` 인식 확인 |
 | ATTACH-NORMAL-013 | `normal/sample.pdf` | PdfHandler | 이슈 발견 | 첨부한 PDF의 페이지별 핵심 내용을 요약해줘. | 앱 런타임에서 `pypdf`가 없어 fallback 추출로 처리되고, 실제 텍스트 PDF를 스캔 PDF처럼 안내함 |
 | ATTACH-NORMAL-014 | `normal/sample.docx` | DocxHandler | 성공 | 첨부한 DOCX 문서의 제목, 문단, 표 내용을 요약해줘. | 제목, 문단, 마지막 문단, 표 텍스트 인식 확인 |
-| ATTACH-NORMAL-015 | `normal/sample.xlsx` | XlsxHandler | 이슈 발견 | 첨부한 XLSX 파일의 시트별 컬럼과 샘플 데이터를 요약해줘. | "XLSX 파일을 읽을 수 없어요: sample.xlsx" 오류 발생. sheet target 경로가 `/xl/...`일 때 handler가 `xl/`을 중복으로 붙이는 구현 문제 가능성 |
+| ATTACH-NORMAL-015 | `normal/sample.xlsx` | XlsxHandler | 성공 | 첨부한 XLSX 파일의 시트별 컬럼과 샘플 데이터를 요약해줘. | 재고/매출 시트명, 컬럼명, 샘플 데이터를 읽는 것을 확인. 동일 문구 반복 출력은 응답 안정성 항목에서 별도 처리 |
 | ATTACH-NORMAL-016 | `normal/sample.pptx` | PptxHandler | 성공 | 첨부한 PPTX 파일의 슬라이드별 텍스트를 요약해줘. | 3개 슬라이드의 제목/본문 텍스트 인식 확인 |
 
 ## 첨부파일 에러/엣지 케이스
@@ -37,7 +37,7 @@
 | ATTACH-EDGE-006 | `edge_cases/corrupted.png` | ImageHandler | 이슈 발견 | 첨부한 이미지에 적힌 텍스트를 읽어줘. | 손상 이미지 전송 시 400 `Failed to load image or audio file` 원시 API 오류가 노출됨 |
 | ATTACH-EDGE-007 | `edge_cases/empty.pdf` | PdfHandler | 성공 | 첨부한 PDF 내용을 요약해줘. | 추출 가능한 텍스트가 없음을 안전하게 안내 |
 | ATTACH-EDGE-008 | `edge_cases/empty.docx` | DocxHandler | 성공 | 첨부한 DOCX 문서 내용을 요약해줘. | 추출 가능한 문서 텍스트가 없음을 안전하게 안내 |
-| ATTACH-EDGE-009 | `edge_cases/empty_sheet.xlsx` | XlsxHandler | 이슈 발견 | 첨부한 XLSX 파일의 시트 내용을 요약해줘. | 정상 XLSX와 동일하게 "XLSX 파일을 읽을 수 없어요" 오류 발생. `ATTACH-FIX-006` 경로 파싱 이슈 범위 |
+| ATTACH-EDGE-009 | `edge_cases/empty_sheet.xlsx` | XlsxHandler | 성공 | 첨부한 XLSX 파일의 시트 내용을 요약해줘. | 빈 시트를 읽고 분석 가능 데이터가 없음을 안내하는 것을 확인. 동일 문구 반복 출력은 응답 안정성 항목에서 별도 처리 |
 | ATTACH-EDGE-010 | `edge_cases/empty.pptx` | PptxHandler | 성공 | 첨부한 PPTX 파일의 슬라이드 내용을 요약해줘. | 전체 슬라이드 1개와 텍스트 없음 상태를 안전하게 안내 |
 | ATTACH-EDGE-011 | `edge_cases/unsupported.exe` | Unsupported | 성공 | 첨부한 파일 내용을 확인해줘. | 드래그 중에는 오류 메시지를 만들지 않고, 드롭 완료 시점에 미지원 형식 오류를 1회만 표시함 |
 | ATTACH-EDGE-012 | `edge_cases/unsupported.zip` | Unsupported | 성공 | 첨부한 파일 내용을 확인해줘. | 드래그 중에는 오류 메시지를 만들지 않고, 드롭 완료 시점에 미지원 형식 오류를 1회만 표시함 |

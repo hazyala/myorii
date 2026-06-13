@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import posixpath
 from pathlib import Path
 from xml.etree import ElementTree
 from zipfile import BadZipFile, ZipFile
@@ -81,7 +82,9 @@ class XlsxHandler:
         targets = {
             rel.attrib["Id"]: rel.attrib["Target"]
             for rel in rels.findall("rel:Relationship", self._NS)
-            if "Id" in rel.attrib and "Target" in rel.attrib
+            if "Id" in rel.attrib
+            and "Target" in rel.attrib
+            and rel.attrib.get("TargetMode") != "External"
         }
         sheets: list[tuple[str, str]] = []
         for sheet in workbook.findall("main:sheets/main:sheet", self._NS):
@@ -89,8 +92,18 @@ class XlsxHandler:
             rel_id = sheet.attrib.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id")
             target = targets.get(rel_id or "")
             if target:
-                sheets.append((name, "xl/" + target.lstrip("/")))
+                sheets.append((name, self._part_path("xl/workbook.xml", target)))
         return sheets
+
+    @staticmethod
+    def _part_path(source_part: str, target: str) -> str:
+        if target.startswith("/"):
+            normalized = posixpath.normpath(target.lstrip("/"))
+        else:
+            normalized = posixpath.normpath(posixpath.join(posixpath.dirname(source_part), target))
+        if normalized.startswith("../") or normalized == "..":
+            raise KeyError(target)
+        return normalized
 
     def _sheet_summary(
         self,

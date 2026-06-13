@@ -11,7 +11,7 @@
 | ATTACH-FIX-003 | context 한도 | ATTACH-NORMAL-010 | `sample.jpeg` 첨부 요청에서 `request (4921 tokens) exceeds the available context size (4096 tokens)` 원시 API 오류가 노출됨 | 원시 오류 대신 메시지 버블에 "대화가 길어져 응답 용량이 초과되었습니다. 새로운 대화를 시작해주세요."처럼 사용자가 이해할 수 있는 안내를 표시해야 함. 이후 히스토리 축약 또는 첨부 context 제한도 검토 필요 | 미수정 |
 | ATTACH-FIX-004 | 응답 포맷 | ATTACH-NORMAL-011 | `sample.gif` 분석 응답에서 요청하지 않은 코드 예시가 생성되고, `sample.gif` 단독 코드블록과 Python 코드블록이 분리되어 표시됨 | 이미지 설명 요청에는 이미지 요약만 답하고, 사용자가 요청하지 않은 코드 예시는 생성하지 않아야 함 | 미수정 |
 | ATTACH-FIX-005 | PDF 의존성/추출 | ATTACH-NORMAL-013 | `sample.pdf`는 5페이지 텍스트 PDF이지만 앱 런타임에 `pypdf`가 없어 fallback 추출로 내려가고, 결과적으로 "스캔된 이미지 기반 PDF"처럼 잘못 안내함 | 런타임/패키징에 `pypdf`를 포함하고, 의존성 누락과 실제 텍스트 없음/OCR 미지원 상황을 구분해 안내해야 함 | 미수정 |
-| ATTACH-FIX-006 | XLSX 경로 파싱 | ATTACH-NORMAL-015 | `sample.xlsx`에서 "XLSX 파일을 읽을 수 없어요: sample.xlsx" 오류 발생. workbook relationship target이 `/xl/worksheets/sheet1.xml`인데 `XlsxHandler`가 `xl/`을 중복으로 붙여 존재하지 않는 경로를 읽으려 함 | relationship target이 `/xl/...`, `worksheets/...`, `../...` 등 어떤 형태여도 zip 내부 실제 경로로 정규화해야 함 | 미수정 |
+| ATTACH-FIX-006 | XLSX 경로 파싱 | ATTACH-NORMAL-015, ATTACH-EDGE-009 | `sample.xlsx`에서 "XLSX 파일을 읽을 수 없어요: sample.xlsx" 오류 발생. workbook relationship target이 `/xl/worksheets/sheet1.xml`인데 `XlsxHandler`가 `xl/`을 중복으로 붙여 존재하지 않는 경로를 읽으려 함 | relationship target이 `/xl/...`, `worksheets/...`, `../...` 등 어떤 형태여도 zip 내부 실제 경로로 정규화해야 함 | 수정 완료 |
 | ATTACH-FIX-007 | 채팅 UX | 긴 메시지 버블 드래그 | 긴 메시지 버블에서 텍스트를 드래그할 때 현재 보이는 화면까지만 선택되고, 화면 상단/하단 경계 밖으로 계속 드래그할 수 없음 | 메시지 버블 또는 코드블록 위에서 마우스 드래그 중 포인터가 스크롤 영역 상단/하단에 가까워지면 채팅 영역이 자동 스크롤되어 긴 응답을 이어서 선택할 수 있어야 함 | 수정 완료 |
 | ATTACH-FIX-008 | 마크다운 렌더링 | ATTACH-EDGE-004 | `invalid.yaml` 응답에서 번호 목록, 들여쓰기, YAML 예시가 여러 코드블록으로 쪼개져 표시되고 일부 텍스트가 줄바꿈/계층 구조를 잃음 | 마크다운 답변의 목록, 들여쓰기, 코드블록을 하나의 일관된 서식으로 렌더링하고 불필요한 코드블록 분리를 막아야 함 | 미수정 |
 | ATTACH-FIX-009 | 응답 안정성 | 첨부 전반 | 채팅이 길어지거나 첨부파일이 2~3개 정도 누적되면 응답 내용이 중복되거나 무관한 내용, 깨진 코드블록, context 초과 오류 등으로 불안정해짐 | 긴 대화와 복수 첨부 상황에서도 히스토리/첨부 context를 안정적으로 관리하고, 필요 시 새 대화 안내나 히스토리 축약을 적용해야 함 | 미수정 |
@@ -35,10 +35,11 @@
 | 미지원 파일 드래그 오류 중복 | ATTACH-EDGE-011, ATTACH-EDGE-012 | 미지원 파일은 드롭 완료 시점에만 오류를 1회 표시하고, 드래그 이동 중에는 반복 오류 메시지를 만들지 않아야 함 |
 | 마크다운 답변 서식 | 첨부 전반 | 목록, 경고문, 코드 예시, YAML/JSON 조각이 섞인 답변에서도 들여쓰기와 코드블록 경계가 안정적으로 유지되어야 함 |
 | 텍스트 없는 문서 | ATTACH-EDGE-007, ATTACH-EDGE-008, ATTACH-EDGE-010 | 파일은 열리지만 추출 가능한 텍스트가 없음을 안내 |
-| 빈 스프레드시트 | ATTACH-EDGE-009 | 시트는 인식하되 분석할 데이터가 없음을 안내 |
+| 빈 스프레드시트 | ATTACH-EDGE-009 | 시트는 인식하되 분석할 데이터가 없음을 안내. 동일 내용 반복 출력은 응답/렌더링 안정성 항목에서 별도로 처리 |
 | 미지원 확장자 | ATTACH-EDGE-011, ATTACH-EDGE-012 | 첨부 선택 또는 전송 시 지원하지 않는 파일 형식 오류를 표시 |
 
 ## 완료
 
 * ATTACH-FIX-011: 미지원 파일은 drag enter/move/hover 단계에서 오류 메시지를 만들지 않고, 실제 drop 완료 시점에만 지원하지 않는 파일 형식 오류를 1회 표시하도록 수정했다. 사용자 수동 테스트에서 `edge_cases/unsupported.exe`, `edge_cases/unsupported.zip` 모두 정상 반영을 확인했다.
 * ATTACH-FIX-007: 긴 메시지 버블과 코드블록에서 마우스 드래그 중 포인터가 채팅 스크롤 영역 상단/하단에 가까워지면 자동 스크롤되도록 수정했다. 사용자 수동 테스트에서 정상 반영을 확인했다.
+* ATTACH-FIX-006: XLSX workbook relationship target을 OOXML part 경로 규칙에 맞게 정규화해 `/xl/...`, `worksheets/...`, `../...` 형태의 sheet target을 읽을 수 있도록 수정했다. 사용자 수동 테스트에서 정상 XLSX와 빈 시트 XLSX 모두 파일 읽기 오류 없이 시트/컬럼/샘플 행 또는 빈 시트 상태를 표시하는 것을 확인했다. 단, 동일 요약 문구가 반복되는 응답 안정성 문제는 `ATTACH-FIX-009` 범위에서 별도 처리한다.
