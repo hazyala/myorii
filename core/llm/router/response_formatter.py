@@ -82,7 +82,11 @@ class ResponseFormatter:
         if self._has_multiline_code_block(text):
             return text
 
-        commands = self._extract_candidate_lines(text)
+        commands = [
+            line
+            for line in self._extract_candidate_lines(text)
+            if _is_shell_command(line) and not _is_command_language_label(line)
+        ]
         if not commands:
             return text
 
@@ -361,12 +365,27 @@ def _is_candidate_like(text: str) -> bool:
 
 
 def _is_shell_command(text: str) -> bool:
+    exact_commands = {
+        "ls",
+        "pwd",
+    }
+    if text in exact_commands:
+        return True
     command_prefixes = (
         "./",
         ".venv/",
+        "awk ",
         "python",
         "python3",
+        "cat ",
+        "find ",
         "pip",
+        "pwd ",
+        "ls ",
+        "grep ",
+        "rg ",
+        "sed ",
+        "touch ",
         "uv ",
         "git ",
         "npm ",
@@ -379,6 +398,10 @@ def _is_shell_command(text: str) -> bool:
         "ollama ",
     )
     return text.startswith(command_prefixes)
+
+
+def _is_command_language_label(text: str) -> bool:
+    return text.strip().lower() in {"bash", "sh", "shell", "zsh"}
 
 
 def _looks_like_code_or_command(text: str) -> bool:

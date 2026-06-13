@@ -139,6 +139,13 @@ class ResponseQualityTest(unittest.TestCase):
                 self.assertTrue(formatted.endswith("\n```"))
                 self.assertIn(output, formatted)
 
+    def test_command_formatter_drops_language_label_lines(self) -> None:
+        request = self._request("터미널에서 현재 폴더 파일 목록 보는 명령어 알려줘")
+        route = self.router.route(request)
+
+        self.assertEqual(route.intent, "command")
+        self.assertEqual(self.formatter.format("bash\nls", route.intent, request), "```bash\nls\n```")
+
     def test_markdown_renderer_preserves_text_after_code_order(self) -> None:
         self.assertTrue(
             MessageBubble._should_preserve_markdown_order(
