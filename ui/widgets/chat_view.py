@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from mimetypes import guess_type
 from pathlib import Path
 
-from PyQt6.QtCore import QEasingCurve, QEvent, QMimeData, QPropertyAnimation, QSize, QTimer, Qt, pyqtSignal
+from PyQt6.QtCore import QEasingCurve, QEvent, QMimeData, QPoint, QPropertyAnimation, QSize, QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import (
     QColor,
     QDragEnterEvent,
@@ -27,13 +29,16 @@ from PyQt6.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
+    QStackedWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
+import storage.chat_store as chat_store
 from core.llm.chat_service import ChatService
-from core.llm.contracts import ChatAttachmentPayload
+from core.llm.contracts import ChatAttachmentPayload, ChatMessagePayload
 from ui.assets import asset_path
 from ui.chat_worker import ChatWorker
 from ui.widgets.message_bubble import MessageAttachment, MessageBubble
@@ -79,6 +84,13 @@ class ChatAttachment:
     @property
     def is_image(self) -> bool:
         return self.suffix in {".bmp", ".gif", ".jpeg", ".jpg", ".png"}
+
+
+@dataclass(frozen=True)
+class TranscriptMessage:
+    role: str
+    text: str
+    attachments: tuple[MessageAttachment, ...] = ()
 
 
 class ElidedLabel(QLabel):
@@ -147,6 +159,358 @@ class AttachmentPreview(QFrame):
         layout.addWidget(thumbnail)
         layout.addWidget(name, 1)
         layout.addWidget(remove_button)
+
+
+class ChatHistoryDragHandle(QWidget):
+    def __init__(self, item: "ChatHistoryItem") -> None:
+        super().__init__()
+        self._item = item
+        self.setFixedSize(14, 20)
+        self.setCursor(Qt.CursorShape.OpenHandCursor)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.grabMouse()
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            self._item.begin_drag(event.globalPosition().toPoint(), grab_mouse=False)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        if event.buttons() & Qt.MouseButton.LeftButton:
+            self._item.update_drag(event.globalPosition().toPoint())
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
+            self._item.end_drag()
+            self.releaseMouse()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        del event
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#cdd2db"))
+        for row in range(3):
+            for col in range(2):
+                painter.drawEllipse(col * 6 + 1, row * 6 + 1, 3, 3)
+        painter.end()
+
+
+class ChatHistoryItem(QFrame):
+    H_MARGIN = 24
+    V_MARGIN = 24
+    MIN_HEIGHT = 88
+    CHROME_WIDTH = 14 + 28 + 18 + H_MARGIN
+    BODY_MAX_LINES = 1
+
+    def __init__(self, session: chat_store.ChatSession, parent_view: "ChatHistoryView") -> None:
+        super().__init__()
+        self._session = session
+        self._messages = chat_store.get_messages(session.id)
+        self._parent_view = parent_view
+        self._drag_active = False
+        self.setObjectName("chatHistoryItem")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self._setup_ui()
+
+    @property
+    def session_id(self) -> int:
+        return self._session.id
+
+    def _setup_ui(self) -> None:
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 11, 12, 11)
+        layout.setSpacing(8)
+
+        self._title = QLabel(self._session.title.strip() or "새 대화")
+        self._title.setObjectName("chatHistoryTitle")
+        self._title.setWordWrap(False)
+        self._title.installEventFilter(self)
+
+        self._body = QLabel(self._display_body())
+        self._body.setObjectName("chatHistoryBody")
+        self._body.setWordWrap(True)
+        self._body.installEventFilter(self)
+
+        self._date = QLabel(self._display_date())
+        self._date.setObjectName("chatHistoryDate")
+        self._date.installEventFilter(self)
+
+        text_col = QVBoxLayout()
+        text_col.setContentsMargins(0, 0, 0, 0)
+        text_col.setSpacing(5)
+        text_col.addWidget(self._title)
+        text_col.addWidget(self._body)
+        text_col.addWidget(self._date)
+
+        delete_btn = QPushButton("x")
+        delete_btn.setObjectName("chatHistoryDeleteButton")
+        delete_btn.setFixedSize(28, 28)
+        delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        delete_btn.clicked.connect(lambda: self._parent_view.delete_session(self))
+
+        layout.addWidget(ChatHistoryDragHandle(self), 0, Qt.AlignmentFlag.AlignVCenter)
+        layout.addLayout(text_col, 1)
+        layout.addWidget(delete_btn, 0, Qt.AlignmentFlag.AlignTop)
+
+    def set_card_width(self, width: int) -> None:
+        width = max(160, width)
+        text_width = max(80, width - self.CHROME_WIDTH)
+
+        title_metrics = self._title.fontMetrics()
+        body_metrics = self._body.fontMetrics()
+        date_metrics = self._date.fontMetrics()
+
+        self._title.setText(title_metrics.elidedText(self._display_title(), Qt.TextElideMode.ElideRight, text_width))
+        self._body.setText(self._elided_body(text_width))
+
+        title_height = title_metrics.height() + 2
+        body_lines = max(1, self._body.text().count("\n") + 1) if self._body.text() else 0
+        body_height = body_lines * body_metrics.lineSpacing()
+        date_height = date_metrics.height() + 2
+        content_height = title_height + body_height + date_height + 10
+
+        self._title.setFixedSize(text_width, title_height)
+        self._body.setFixedSize(text_width, body_height)
+        self._date.setFixedSize(text_width, date_height)
+        self.setFixedSize(width, max(self.MIN_HEIGHT, content_height + self.V_MARGIN))
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802
+        if watched in (self._title, self._body, self._date):
+            if event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
+                self._parent_view.open_session(self._session.id)
+                return True
+        return super().eventFilter(watched, event)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton:
+            if self._drag_active:
+                self.end_drag()
+                event.accept()
+                return
+            self._parent_view.open_session(self._session.id)
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def begin_drag(self, global_pos: QPoint, grab_mouse: bool = True) -> None:
+        if grab_mouse:
+            self.grabMouse()
+        self._drag_active = True
+        self.setProperty("dragging", True)
+        self.style().unpolish(self)
+        self.style().polish(self)
+        self._parent_view.begin_drag(self, global_pos)
+
+    def update_drag(self, global_pos: QPoint) -> None:
+        self._parent_view.update_drag(global_pos)
+
+    def end_drag(self) -> None:
+        self._drag_active = False
+        self.setProperty("dragging", False)
+        self.style().unpolish(self)
+        self.style().polish(self)
+        if self.mouseGrabber() is self:
+            self.releaseMouse()
+        self._parent_view.end_drag()
+
+    def _display_title(self) -> str:
+        return self._session.title.strip() or "새 대화"
+
+    def _display_body(self) -> str:
+        assistant = next(
+            (
+                self._preview_text(message.content)
+                for message in self._messages
+                if message.role == "assistant" and self._preview_text(message.content)
+            ),
+            "",
+        )
+        if assistant:
+            return assistant
+
+        return next(
+            (
+                self._preview_text(message.content)
+                for message in self._messages
+                if message.role == "user" and self._preview_text(message.content)
+            ),
+            "",
+        )
+
+    def _elided_body(self, width: int) -> str:
+        text = self._display_body()
+        if not text:
+            return ""
+        metrics = self._body.fontMetrics()
+        return metrics.elidedText(text, Qt.TextElideMode.ElideRight, width)
+
+    def _display_date(self) -> str:
+        value = self._session.updated_at or self._session.created_at
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone()
+        except ValueError:
+            return value
+
+        now = datetime.now(timezone.utc).astimezone()
+        if dt.date() == now.date():
+            return dt.strftime("오늘 %p %-I:%M").replace("AM", "오전").replace("PM", "오후")
+        return dt.strftime("%-m월 %-d일 %p %-I:%M").replace("AM", "오전").replace("PM", "오후")
+
+    @staticmethod
+    def _preview_text(text: str) -> str:
+        return " ".join(line.strip() for line in text.splitlines() if line.strip())
+
+
+class ChatHistoryView(QWidget):
+    back_requested = pyqtSignal()
+    session_selected = pyqtSignal(int)
+
+    LIST_MARGIN_X = 14
+    ITEM_GAP = 7
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setObjectName("chatHistoryView")
+        self._items: list[ChatHistoryItem] = []
+        self._drag_item: ChatHistoryItem | None = None
+        self._setup_ui()
+        self.refresh_list()
+
+    def _setup_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self._build_header())
+
+        self._scroll = QScrollArea()
+        self._scroll.setObjectName("chatHistoryScrollArea")
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+        self._list_widget = QWidget()
+        self._list_widget.setObjectName("chatHistoryListContent")
+        self._list_layout = QVBoxLayout(self._list_widget)
+        self._list_layout.setContentsMargins(self.LIST_MARGIN_X, 9, self.LIST_MARGIN_X, 10)
+        self._list_layout.setSpacing(self.ITEM_GAP)
+        self._list_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self._empty_label = QLabel("저장된 채팅이 없습니다.")
+        self._empty_label.setObjectName("chatHistoryEmpty")
+        self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._list_layout.addWidget(self._empty_label)
+        self._list_layout.addStretch(1)
+
+        self._scroll.setWidget(self._list_widget)
+        layout.addWidget(self._scroll, 1)
+
+    def _build_header(self) -> QWidget:
+        frame = QFrame()
+        frame.setObjectName("chatHistoryHeader")
+        layout = QHBoxLayout(frame)
+        layout.setContentsMargins(17, 10, 17, 10)
+        layout.setSpacing(6)
+
+        back = QPushButton("‹")
+        back.setObjectName("chatHistoryBackButton")
+        back.setFixedSize(20, 20)
+        back.setCursor(Qt.CursorShape.PointingHandCursor)
+        back.clicked.connect(self.back_requested.emit)
+
+        self._title_label = QLabel("채팅 기록")
+        self._title_label.setObjectName("chatHistoryHeaderTitle")
+        self._count_label = QLabel("0")
+        self._count_label.setObjectName("chatHistoryCount")
+
+        layout.addWidget(back)
+        layout.addWidget(self._title_label)
+        layout.addWidget(self._count_label)
+        layout.addStretch(1)
+        return frame
+
+    def refresh_list(self) -> None:
+        sessions = chat_store.get_all_sessions()
+        self._clear_items()
+        self._empty_label.setVisible(not sessions)
+        for session in sessions:
+            self._insert_item(session)
+        self._count_label.setText(str(len(sessions)))
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        QTimer.singleShot(0, self.sync_item_sizes)
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        self.refresh_list()
+        QTimer.singleShot(0, self.sync_item_sizes)
+
+    def open_session(self, session_id: int) -> None:
+        self.session_selected.emit(session_id)
+
+    def delete_session(self, item: ChatHistoryItem) -> None:
+        chat_store.delete_session(item.session_id)
+        self.refresh_list()
+
+    def begin_drag(self, item: ChatHistoryItem, global_pos: QPoint) -> None:
+        self._drag_item = item
+        self.update_drag(global_pos)
+
+    def update_drag(self, global_pos: QPoint) -> None:
+        if self._drag_item is None or len(self._items) < 2:
+            return
+        old_index = self._items.index(self._drag_item)
+        new_index = self._index_for_global_y(global_pos)
+        if new_index == old_index:
+            return
+        self._items.pop(old_index)
+        self._items.insert(new_index, self._drag_item)
+        self._list_layout.removeWidget(self._drag_item)
+        self._list_layout.insertWidget(new_index, self._drag_item, 0, Qt.AlignmentFlag.AlignTop)
+        self.sync_item_sizes()
+
+    def end_drag(self) -> None:
+        if self._drag_item is None:
+            return
+        chat_store.reorder_many([item.session_id for item in self._items])
+        self._drag_item = None
+
+    def sync_item_sizes(self) -> None:
+        width = self._scroll.viewport().width() - (self.LIST_MARGIN_X * 2)
+        for item in self._items:
+            item.set_card_width(width)
+        self._list_widget.setMinimumWidth(self._scroll.viewport().width())
+
+    def _insert_item(self, session: chat_store.ChatSession) -> None:
+        item = ChatHistoryItem(session, self)
+        self._items.append(item)
+        self._list_layout.insertWidget(len(self._items) - 1, item, 0, Qt.AlignmentFlag.AlignTop)
+        QTimer.singleShot(0, self.sync_item_sizes)
+
+    def _clear_items(self) -> None:
+        for item in self._items:
+            self._list_layout.removeWidget(item)
+            item.deleteLater()
+        self._items.clear()
+
+    def _index_for_global_y(self, global_pos: QPoint) -> int:
+        local_y = self._list_widget.mapFromGlobal(global_pos).y()
+        for index, item in enumerate(self._items):
+            if local_y < item.geometry().center().y():
+                return index
+        return max(0, len(self._items) - 1)
 
 
 class ChatInput(QTextEdit):
@@ -261,6 +625,10 @@ class ChatView(QWidget):
         self._assistant_has_content = False
         self._attachments: list[ChatAttachment] = []
         self._history_enabled = False
+        self._current_session_id: int | None = None
+        self._transcript: list[TranscriptMessage] = []
+        self._pending_user: TranscriptMessage | None = None
+        self._last_saved_transcript_len = 0
         self._toast = QLabel("복사됨", self)
         self._toast.setObjectName("copyToast")
         self._toast.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -281,8 +649,14 @@ class ChatView(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        layout.addWidget(self._chat_scroll_area(), 1)
-        layout.addWidget(self._input_panel())
+        self._page_stack = QStackedWidget()
+        self._conversation_page = self._conversation_panel()
+        self._history_view = ChatHistoryView()
+        self._history_view.back_requested.connect(self._show_conversation)
+        self._history_view.session_selected.connect(self._load_session)
+        self._page_stack.addWidget(self._conversation_page)
+        self._page_stack.addWidget(self._history_view)
+        layout.addWidget(self._page_stack, 1)
 
         self._worker.token.connect(self._append_assistant_token)
         self._worker.finished.connect(self._finish_response)
@@ -290,6 +664,22 @@ class ChatView(QWidget):
 
     def set_model(self, model: str) -> None:
         self._chat_service.set_model(model)
+
+    def prepare_for_window_close(self) -> None:
+        if self._worker.is_running:
+            return
+        self._reset_conversation()
+        self._show_conversation()
+
+    def _conversation_panel(self) -> QWidget:
+        page = QWidget()
+        page.setObjectName("chatConversationPage")
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(0)
+        layout.addWidget(self._chat_scroll_area(), 1)
+        layout.addWidget(self._input_panel())
+        return page
 
     def _chat_scroll_area(self) -> QWidget:
         self._scroll_area = QScrollArea()
@@ -329,6 +719,7 @@ class ChatView(QWidget):
         history_list.setIconSize(QSize(15, 15))
         history_list.setFixedHeight(28)
         history_list.setCursor(Qt.CursorShape.PointingHandCursor)
+        history_list.clicked.connect(self._show_history)
 
         history_label = QLabel("대화 기록 저장")
         history_label.setObjectName("historyLabel")
@@ -411,6 +802,7 @@ class ChatView(QWidget):
         request_text = self._message_text_with_attachments(text)
         message_attachments = self._message_attachments()
         request_attachments = self._request_attachments()
+        self._pending_user = TranscriptMessage("user", text, tuple(message_attachments))
         self._add_message("user", text, message_attachments)
         self._prompt.clear()
         self._clear_attachments()
@@ -456,6 +848,7 @@ class ChatView(QWidget):
                     self._assistant_bubble.set_text("응답을 생성하지 못했습니다. 다시 시도해주세요.")
             self._assistant_bubble.render_markdown()
             self._register_pointer_autoscroll_widget(self._assistant_bubble)
+        self._record_exchange(final_text)
         self._assistant_bubble = None
         self._assistant_has_content = False
         self._set_input_enabled(True)
@@ -469,6 +862,7 @@ class ChatView(QWidget):
             self._assistant_bubble = None
         else:
             self._add_message("assistant", message)
+        self._record_exchange(message)
         self._set_input_enabled(True)
         self._scroll_to_bottom()
 
@@ -481,6 +875,152 @@ class ChatView(QWidget):
 
     def _set_history_enabled(self, enabled: bool) -> None:
         self._history_enabled = enabled
+        if enabled and self._transcript:
+            self._ensure_session()
+            self._history_view.refresh_list()
+
+    def _show_history(self) -> None:
+        if self._worker.is_running:
+            return
+        self._history_view.refresh_list()
+        self._page_stack.setCurrentWidget(self._history_view)
+
+    def _show_conversation(self) -> None:
+        self._page_stack.setCurrentWidget(self._conversation_page)
+        QTimer.singleShot(0, self._prompt.setFocus)
+
+    def _load_session(self, session_id: int) -> None:
+        if self._worker.is_running:
+            return
+
+        stored_messages = chat_store.get_messages(session_id)
+        transcript: list[TranscriptMessage] = []
+        service_messages: list[ChatMessagePayload] = []
+        for message in stored_messages:
+            attachments = tuple(self._stored_message_attachments(message.id))
+            transcript.append(TranscriptMessage(message.role, message.content, attachments))
+            service_messages.append(ChatMessagePayload(role=message.role, content=message.content))
+
+        self._reset_conversation(clear_session=False)
+        self._current_session_id = session_id
+        self._history_enabled = True
+        self._history_switch.blockSignals(True)
+        self._history_switch.setChecked(True)
+        self._history_switch.blockSignals(False)
+        self._transcript = transcript
+        self._last_saved_transcript_len = len(transcript)
+        self._chat_service.set_history(service_messages)
+        for item in transcript:
+            bubble = self._add_message(item.role, item.text, list(item.attachments))
+            if item.role == "assistant":
+                bubble.render_markdown()
+        self._show_conversation()
+
+    def _record_exchange(self, assistant_text: str) -> None:
+        if self._pending_user is None:
+            return
+
+        assistant_text = assistant_text.strip() or "응답을 생성하지 못했습니다. 다시 시도해주세요."
+        user_message = self._pending_user
+        assistant_message = TranscriptMessage("assistant", assistant_text)
+        self._transcript.extend([user_message, assistant_message])
+        self._pending_user = None
+
+        if not self._history_enabled:
+            return
+
+        is_new_session = self._current_session_id is None
+        session_id = self._ensure_session()
+        if is_new_session:
+            self._history_view.refresh_list()
+            return
+
+        user_row = chat_store.add_message(session_id, "user", user_message.text)
+        for attachment in user_message.attachments:
+            chat_store.add_attachment(
+                user_row.id,
+                attachment.path,
+                guess_type(attachment.name)[0] or "application/octet-stream",
+            )
+        chat_store.add_message(session_id, "assistant", assistant_text)
+        self._last_saved_transcript_len = len(self._transcript)
+        self._history_view.refresh_list()
+
+    def _ensure_session(self) -> int:
+        if self._current_session_id is not None:
+            return self._current_session_id
+
+        session = chat_store.create_session(self._title_for_transcript())
+        self._current_session_id = session.id
+        for item in self._transcript:
+            row = chat_store.add_message(session.id, item.role, item.text)
+            if item.role == "user":
+                for attachment in item.attachments:
+                    chat_store.add_attachment(
+                        row.id,
+                        attachment.path,
+                        guess_type(attachment.name)[0] or "application/octet-stream",
+                    )
+        self._last_saved_transcript_len = len(self._transcript)
+        return session.id
+
+    def _title_for_transcript(self) -> str:
+        user_text = next((item.text.strip() for item in self._transcript if item.role == "user" and item.text.strip()), "")
+        if not user_text and self._pending_user is not None:
+            user_text = self._pending_user.text.strip()
+        if not user_text:
+            attachment = next(
+                (
+                    item.attachments[0].name
+                    for item in self._transcript
+                    if item.role == "user" and item.attachments
+                ),
+                "",
+            )
+            if not attachment and self._pending_user is not None and self._pending_user.attachments:
+                attachment = self._pending_user.attachments[0].name
+            user_text = f"첨부 파일: {attachment}" if attachment else "새 대화"
+        return " ".join(user_text.split())[:42]
+
+    def _reset_conversation(self, clear_session: bool = True) -> None:
+        self._clear_message_bubbles()
+        self._clear_attachments()
+        self._prompt.clear()
+        self._assistant_bubble = None
+        self._assistant_has_content = False
+        self._pending_user = None
+        self._transcript.clear()
+        self._last_saved_transcript_len = 0
+        self._chat_service.clear()
+        if clear_session:
+            self._current_session_id = None
+            self._history_enabled = False
+            self._history_switch.blockSignals(True)
+            self._history_switch.setChecked(False)
+            self._history_switch.blockSignals(False)
+
+    def _clear_message_bubbles(self) -> None:
+        for index in reversed(range(self._message_layout.count())):
+            item = self._message_layout.itemAt(index)
+            widget = item.widget()
+            if isinstance(widget, MessageBubble):
+                self._message_layout.removeWidget(widget)
+                widget.deleteLater()
+
+    def _stored_message_attachments(self, message_id: int) -> list[MessageAttachment]:
+        attachments: list[MessageAttachment] = []
+        for attachment in chat_store.get_attachments(message_id):
+            path = Path(attachment.file_path)
+            mime_type = attachment.mime_type or guess_type(path.name)[0] or ""
+            attachments.append(
+                MessageAttachment(
+                    path=str(path),
+                    name=path.name,
+                    suffix=path.suffix.lower(),
+                    is_image=mime_type.startswith("image/") or path.suffix.lower() in {".bmp", ".gif", ".jpeg", ".jpg", ".png"},
+                )
+            )
+        return attachments
 
     def _scroll_to_bottom(self) -> None:
         QTimer.singleShot(0, lambda: self._scroll_area.verticalScrollBar().setValue(

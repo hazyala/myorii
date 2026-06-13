@@ -46,6 +46,9 @@ class ChatService:
     def clear(self) -> None:
         self._messages.clear()
 
+    def set_history(self, messages: list[ChatMessagePayload]) -> None:
+        self._messages = list(messages)
+
     def send(
         self,
         user_text: str,

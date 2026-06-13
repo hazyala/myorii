@@ -159,7 +159,7 @@ storage/
 
 ```text
 myorii.db
-├── chat_sessions     (id, title, created_at, updated_at)
+├── chat_sessions     (id, title, ord, created_at, updated_at)
 ├── chat_messages     (id, session_id, role, content, created_at)
 ├── chat_attachments  (id, message_id, file_path, mime_type, created_at)
 ├── todos             (id, text, done, ord, created_at, updated_at)
@@ -168,8 +168,10 @@ myorii.db
 
 DB 파일은 `~/Library/Application Support/Myorii/myorii.db`에 저장된다.  
 앱 재설치 후에도 데이터가 유지된다.  
-`ord` 컬럼은 float으로 저장하고, 할 일 드래그 재정렬 완료 시 현재 UI 순서대로 다시 번호를 부여한다.  
+`ord` 컬럼은 float으로 저장하고, 할 일/메모/채팅 기록 드래그 재정렬 완료 시 현재 UI 순서대로 다시 번호를 부여한다.  
 V3 클라우드 동기화 시 `chat_attachments`에 `remote_url` 컬럼을 추가해 로컬 파일 없이 URL 접근을 지원한다.
+
+채팅 세션은 대화 기록 저장 스위치가 켜진 대화만 생성한다. 기록 목록은 `chat_sessions.ord` 기준으로 정렬하며, 세션 삭제 시 `chat_messages`와 `chat_attachments`는 FK cascade로 함께 삭제된다.
 
 # MVP 기능 흐름
 
@@ -333,7 +335,7 @@ MainWindow toggle_at(icon_geometry)
 * 사용자/Assistant 메시지 버블과 Assistant Markdown 렌더링
 * 코드블록/인라인 코드/기술 항목 클릭 복사와 `복사됨` 토스트
 * 응답 생성 중 빨간 발바닥 바운스 인디케이터
-* 채팅 기록 버튼, 입력창 내부 `+` 파일 선택 액션, 대화 기록 저장 스위치
+* 채팅 기록 버튼/목록, 입력창 내부 `+` 파일 선택 액션, 대화 기록 저장 스위치
 * 입력부 드래그 앤 드롭 파일 첨부와 첨부 파일 미리보기 카드
 * 지원하지 않는 파일 형식에 대한 Assistant 오류 메시지 표시
 * `Enter` 전송, `Shift+Enter` 줄바꿈을 처리하는 입력 위젯
