@@ -41,6 +41,9 @@ class ModelRouter:
                 return ModelRoute(model=vision_model, reason="vision_intent")
             return ModelRoute(model=selected_model, reason="vision_fallback_selected")
 
+        if intent == "code_generation":
+            return ModelRoute(model=selected_model, reason="code_generation_selected_model")
+
         if self._fast_text_model in installed:
             return ModelRoute(model=self._fast_text_model, reason="fast_text")
 

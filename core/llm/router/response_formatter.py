@@ -10,7 +10,14 @@ class ResponseFormatter:
 
     _BUFFERED_INTENT_PREFIXES = ("naming_",)
     _ATTACHMENT_INTENTS = {"document_question", "spreadsheet_question", "image_question"}
-    _BUFFERED_INTENTS = {"command", "commit_message", "image_code_transcription", *_ATTACHMENT_INTENTS}
+    _BUFFERED_INTENTS = {
+        "translate",
+        "command",
+        "commit_message",
+        "code_generation",
+        "image_code_transcription",
+        *_ATTACHMENT_INTENTS,
+    }
 
     def should_buffer(self, intent: str) -> bool:
         return intent in self._BUFFERED_INTENTS or intent.startswith(self._BUFFERED_INTENT_PREFIXES)
@@ -19,13 +26,16 @@ class ResponseFormatter:
         cleaned = text.strip()
         if not cleaned:
             return cleaned
-
         if intent.startswith("naming_"):
-            return self._format_code_candidates(cleaned, request, language=self._language_for_naming(intent))
+            return self._format_code_candidates(cleaned, request, language=self._language_for_naming(intent, request))
         if intent == "commit_message":
             return self._format_code_candidates(cleaned, request, language="text")
+        if intent == "translate":
+            return self._format_translation(cleaned, request)
         if intent == "command":
             return self._format_command(cleaned)
+        if intent == "code_generation":
+            return self._format_code_generation(cleaned, request)
         if intent == "image_code_transcription":
             return self._format_single_snippet(cleaned)
         if intent in self._ATTACHMENT_INTENTS:
@@ -48,8 +58,21 @@ class ResponseFormatter:
         if not candidates:
             return text
 
-        blocks = [f"```{language}\n{candidate}\n```" for candidate in candidates]
-        return "가장 무난한 후보입니다.\n\n" + "\n\n".join(blocks)
+        blocks = "\n\n".join(f"```{language}\n{candidate}\n```" for candidate in candidates)
+        if self._wants_candidates_only(request.user_message.content):
+            return blocks
+        return "가장 무난한 후보입니다.\n\n" + blocks
+
+    def _format_translation(self, text: str, request: ChatRequest) -> str:
+        if not _is_short_translation_request(request.user_message.content):
+            return text
+
+        translated = self._first_result_line(text)
+        if not translated:
+            return text
+        if "\n" in translated or len(translated) > 80:
+            return text
+        return f"```text\n{translated}\n```"
 
     def _format_command(self, text: str) -> str:
         command_blocks = self._extract_command_blocks(text)
@@ -59,11 +82,99 @@ class ResponseFormatter:
         if self._has_multiline_code_block(text):
             return text
 
-        commands = self._extract_candidate_lines(text)
+        commands = [
+            line
+            for line in self._extract_candidate_lines(text)
+            if _is_shell_command(line) and not _is_command_language_label(line)
+        ]
         if not commands:
             return text
 
         return "\n\n".join(f"```bash\n{command}\n```" for command in commands[:3])
+
+    def _format_code_generation(self, text: str, request: ChatRequest) -> str:
+        blocks = self._extract_code_blocks(text)
+        if blocks:
+            with_context = self._format_code_blocks_with_context(text, request)
+            if with_context:
+                return with_context
+            return "\n\n".join(
+                f"```{language or self._language_for_code_request(request.user_message.content)}\n{code}\n```"
+                for language, code in blocks
+            )
+
+        language = self._language_for_code_request(request.user_message.content)
+        with_context = self._format_likely_code_with_context(text, language)
+        if with_context:
+            return with_context
+        code = self._extract_likely_code(text)
+        if code:
+            return f"```{language}\n{code}\n```"
+        return text
+
+    def _format_code_blocks_with_context(self, text: str, request: ChatRequest) -> str:
+        pattern = re.compile(r"```([a-zA-Z0-9_-]*)\n(.*?)```", flags=re.DOTALL)
+        position = 0
+        parts: list[str] = []
+        text_found = False
+
+        for match in pattern.finditer(text):
+            before = self._clean_context_text(text[position : match.start()])
+            if before:
+                text_found = True
+                parts.append(before)
+
+            language = match.group(1) or self._language_for_code_request(request.user_message.content)
+            code = match.group(2).strip()
+            if code:
+                parts.append(f"```{language}\n{code}\n```")
+            position = match.end()
+
+        after = self._clean_context_text(text[position:])
+        if after:
+            text_found = True
+            parts.append(after)
+
+        if not text_found:
+            return ""
+        return "\n\n".join(parts)
+
+    def _format_likely_code_with_context(self, text: str, language: str) -> str:
+        lines = text.strip().splitlines()
+        code_indexes = [index for index, line in enumerate(lines) if _looks_like_code_or_command(line)]
+        if not code_indexes:
+            return ""
+
+        start = code_indexes[0]
+        end = code_indexes[-1] + 1
+        before = self._clean_context_text("\n".join(lines[:start]))
+        code = "\n".join(lines[start:end]).strip()
+        after = self._clean_context_text("\n".join(lines[end:]))
+        if not before and not after:
+            return ""
+        if not code:
+            return ""
+
+        parts = []
+        if before:
+            parts.append(before)
+        parts.append(f"```{language}\n{code}\n```")
+        if after:
+            parts.append(after)
+        return "\n\n".join(parts)
+
+    @staticmethod
+    def _clean_context_text(text: str) -> str:
+        paragraphs: list[str] = []
+        for paragraph in re.split(r"\n{2,}", text.strip()):
+            lines = []
+            for line in paragraph.splitlines():
+                cleaned = re.sub(r"^\s*\d+[.)]\s*", "", line.strip())
+                if cleaned:
+                    lines.append(cleaned)
+            if lines:
+                paragraphs.append(" ".join(lines))
+        return "\n\n".join(paragraphs)
 
     def _format_single_snippet(self, text: str) -> str:
         blocks = self._extract_code_blocks(text)
@@ -173,11 +284,114 @@ class ResponseFormatter:
         return max(1, min(int(match.group(1)), 10))
 
     @staticmethod
-    def _language_for_naming(intent: str) -> str:
-        if intent in {"naming_file", "naming_folder", "naming_branch", "naming_pr"}:
+    def _wants_candidates_only(text: str) -> bool:
+        normalized = re.sub(r"\s+", " ", text.strip().lower())
+        return "만" in normalized or any(keyword in normalized for keyword in ("only", "just"))
+
+    @staticmethod
+    def _first_result_line(text: str) -> str:
+        for line in text.splitlines():
+            candidate = _clean_candidate(line)
+            if candidate:
+                return candidate
+        return ""
+
+    @staticmethod
+    def _language_for_code_request(text: str) -> str:
+        normalized = text.lower()
+        if "sql" in normalized or "쿼리" in normalized:
+            return "sql"
+        if "html" in normalized or "마크업" in normalized:
+            return "html"
+        if "css" in normalized or "스타일" in normalized or "스타일시트" in normalized:
+            return "css"
+        if "java" in normalized or "자바" in normalized:
+            return "java"
+        if "c++" in normalized or "cpp" in normalized:
+            return "cpp"
+        if "c#" in normalized or "csharp" in normalized:
+            return "csharp"
+        if re.search(r"\bc\s*(?:언어|code|코드)\b", normalized) or "c언어" in normalized:
+            return "c"
+        if "go" in normalized or "golang" in normalized:
+            return "go"
+        if "rust" in normalized or "러스트" in normalized:
+            return "rust"
+        if "swift" in normalized or "스위프트" in normalized:
+            return "swift"
+        if "kotlin" in normalized or "코틀린" in normalized:
+            return "kotlin"
+        if "php" in normalized:
+            return "php"
+        if "ruby" in normalized or "루비" in normalized:
+            return "ruby"
+        if "javascript" in normalized or "자바스크립트" in normalized or re.search(r"\bjs\b", normalized):
+            return "javascript"
+        if "typescript" in normalized or "타입스크립트" in normalized or re.search(r"\bts\b", normalized):
+            return "typescript"
+        if "shell" in normalized or "bash" in normalized or "스크립트" in normalized:
+            return "bash"
+        if "regex" in normalized or "정규식" in normalized:
+            return "text"
+        return "python"
+
+    @staticmethod
+    def _extract_likely_code(text: str) -> str:
+        lines = text.strip().splitlines()
+        if not lines:
+            return ""
+
+        non_empty_lines = [line for line in lines if line.strip()]
+        code_indexes = [index for index, line in enumerate(lines) if _looks_like_code_or_command(line)]
+        if not code_indexes:
+            return ""
+        if len(code_indexes) == len(non_empty_lines):
+            return text.strip()
+
+        start = code_indexes[0]
+        block: list[str] = []
+        for line in lines[start:]:
+            stripped = line.strip()
+            if not stripped:
+                if block:
+                    break
+                continue
+            if block and not _looks_like_code_or_command(line) and not line.startswith((" ", "\t")):
+                if re.search(r"[가-힣]\s+[가-힣]", stripped):
+                    break
+            block.append(line)
+
+        return "\n".join(block).strip()
+
+    @staticmethod
+    def _naming_style(text: str) -> str:
+        normalized = text.lower()
+        if any(keyword in normalized for keyword in ("java", "자바", "javascript", "자바스크립트", "typescript", "타입스크립트", "c#", "csharp")):
+            return "camel"
+        return "snake"
+
+    @staticmethod
+    def _language_for_naming(intent: str, request: ChatRequest) -> str:
+        if intent in {
+            "naming_class",
+            "naming_component",
+            "naming_constant",
+            "naming_endpoint",
+            "naming_file",
+            "naming_folder",
+            "naming_interface",
+            "naming_package",
+            "naming_pr",
+            "naming_table",
+            "naming_column",
+            "naming_type",
+            "naming_branch",
+        }:
             return "text"
         if intent == "naming_env":
             return "bash"
+        if ResponseFormatter._naming_style(request.user_message.content) == "camel":
+            return "text"
         return "python"
 
 
@@ -221,12 +435,27 @@ def _is_candidate_like(text: str) -> bool:
 
 
 def _is_shell_command(text: str) -> bool:
+    exact_commands = {
+        "ls",
+        "pwd",
+    }
+    if text in exact_commands:
+        return True
     command_prefixes = (
         "./",
         ".venv/",
+        "awk ",
         "python",
         "python3",
+        "cat ",
+        "find ",
         "pip",
+        "pwd ",
+        "ls ",
+        "grep ",
+        "rg ",
+        "sed ",
+        "touch ",
         "uv ",
         "git ",
         "npm ",
@@ -241,6 +470,10 @@ def _is_shell_command(text: str) -> bool:
     return text.startswith(command_prefixes)
 
 
+def _is_command_language_label(text: str) -> bool:
+    return text.strip().lower() in {"bash", "sh", "shell", "zsh"}
+
+
 def _looks_like_code_or_command(text: str) -> bool:
     stripped = text.strip()
     if not stripped:
@@ -249,11 +482,50 @@ def _looks_like_code_or_command(text: str) -> bool:
     lines = [line.strip() for line in stripped.splitlines() if line.strip()]
     if any(_is_shell_command(line) for line in lines):
         return True
-    if any(re.match(r"^(async\s+def|def|class|function|import|from)\b", line) for line in lines):
+    declaration = r"^(?:(?:public|private|protected|internal|static|final|abstract|sealed)\s+)*(async\s+def|def|class|interface|enum|struct|record|function|import|from|using|namespace)\b"
+    if any(re.match(declaration, line) for line in lines):
+        return True
+    if any(re.match(r"^[A-Za-z_][A-Za-z0-9_.]*\(.*\)$", line) for line in lines):
+        return True
+    if any(re.match(r"^(select|insert|update|delete|with|create|alter|drop)\b", line, flags=re.IGNORECASE) for line in lines):
         return True
     if any(re.search(r"[{};]|=>|</?\w+|=\s*[^=]", line) for line in lines):
         return True
     return False
+
+
+def _is_short_translation_request(text: str) -> bool:
+    normalized = re.sub(r"\s+", " ", text.strip().lower())
+    if not normalized:
+        return False
+    if not any(keyword in normalized for keyword in ("번역", "영어로", "한국어로", "일본어로", "translate", "뜻", "의미")):
+        return False
+
+    source = normalized
+    for token in (
+        "번역해줘",
+        "번역",
+        "영어로",
+        "한국어로",
+        "일본어로",
+        "translate",
+        "뜻",
+        "의미",
+        "뭐야",
+        "뭔가요",
+        "단어",
+        "용어",
+        "를",
+        "을",
+        "은",
+        "는",
+        "?",
+    ):
+        source = source.replace(token, " ")
+    source = re.sub(r"\s+", " ", source).strip()
+    if re.search(r"(요|니다|습니까|까요|해줘|해주세요)$", source):
+        return False
+    return bool(source) and len(source) <= 40 and len(source.split()) <= 4
 
 
 _CODE_FENCE_LANGUAGES = {

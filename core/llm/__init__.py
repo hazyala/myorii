@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core.llm.chat_service import ChatService, DEFAULT_MODEL
+from core.llm.chat_service import ChatService, DEFAULT_MODEL, EmptyModelResponse
 from core.llm.contracts import (
     AttachmentKind,
     ChatAttachmentPayload,
@@ -20,6 +20,7 @@ __all__ = [
     "ChatRequest",
     "DEFAULT_MODEL",
     "DeviceContext",
+    "EmptyModelResponse",
     "ModelNotFound",
     "OllamaClient",
     "OllamaNotRunning",

@@ -153,6 +153,7 @@ translate
 command
 commit_message
 pr_description
+code_generation
 code_explain
 code_fix
 image_question
@@ -160,6 +161,8 @@ image_code_transcription
 document_question
 spreadsheet_question
 ```
+
+`code_generation`은 사용자가 Python, Java, HTML, CSS, C/C++/C#, JavaScript/TypeScript, SQL, 정규식, 스크립트 같은 복사 가능한 개발 산출물을 직접 요청할 때 사용한다. `분석해줘`, `요약해줘` 같은 일반 읽기 요청은 코드 맥락이 명확하지 않으면 `simple_chat`으로 둔다.
 
 `image_code_transcription`은 코드 캡처 이미지를 복사 가능한 코드블록으로 복원하는 의도다. 이미지가 있고 사용자가 `코드`, `캡쳐`, `복사`, `텍스트로`, `옮겨줘` 같은 표현을 쓰면 이 의도로 분류한다.
 
@@ -183,6 +186,7 @@ prompts/
     command.md
     commit_message.md
     pr_description.md
+    code_generation.md
     image_question.md
     image_code_transcription.md
     document_question.md
@@ -197,6 +201,7 @@ naming_*                    -> few-shot prompting
 command                     -> few-shot prompting
 commit_message              -> few-shot prompting
 pr_description              -> few-shot prompting
+code_generation             -> few-shot prompting + code fence normalization
 code_explain                -> zero-shot prompting + format instruction
 image_question              -> zero-shot prompting + visual instruction
 image_code_transcription    -> few-shot prompting
@@ -204,7 +209,7 @@ document_question           -> retrieval-augmented generation, RAG
 spreadsheet_question        -> retrieval-augmented generation, RAG
 ```
 
-단순 채팅과 번역은 예시가 많을수록 느려지므로 zero-shot prompting을 사용한다. 네이밍, 명령어, 커밋/PR, 코드 캡처 복원은 출력 형식이 중요하므로 few-shot prompting으로 예시를 제공한다. PDF/문서/스프레드시트는 본문 전체를 넣지 않고 필요한 일부만 추출해 RAG 방식으로 확장한다.
+단순 채팅은 예시가 많을수록 느려지므로 zero-shot prompting을 사용한다. 네이밍, 짧은 단어 번역, 명령어, 코드 생성, 커밋/PR, 코드 캡처 복원은 출력 형식이 중요하므로 profile과 `ResponseFormatter`가 복사 가능한 형태를 맞춘다. PDF/문서/스프레드시트는 본문 전체를 넣지 않고 필요한 일부만 추출해 RAG 방식으로 확장한다.
 
 4차 구현에서는 `PromptProfileResolver`가 공통 `system.md`와 `prompts/profiles/`의 의도별 프로필을 조립한다. `system.md`는 Myorii의 정체성과 공통 응답 원칙만 담고, 네이밍/번역/명령어/커밋/이미지 규칙은 profile 파일로 분리한다.
 
@@ -238,9 +243,9 @@ fast_text_model
 vision_model
 ```
 
-설정 화면에서 사용자가 모델을 고를 수 있게 하되, 라우터는 이미지가 없는 짧은 요청을 fast text 모델로 보내는 기본값을 유지한다.
+설정 화면에서 사용자가 모델을 고를 수 있게 하되, 라우터는 이미지가 없는 짧은 요청을 fast text 모델로 보내는 기본값을 유지한다. 다만 코드 생성 요청은 작은 fast text 모델보다 현재 선택 모델의 품질이 중요하므로 fast model 우선 경로에서 제외한다.
 
-3차 구현에서는 `ModelRouter.route(request, intent, available_models)`가 모델을 결정한다. 이미지 의도는 vision 모델을 유지하고, 텍스트 의도는 설치된 `MYORII_FAST_TEXT_MODEL` 또는 기본 `qwen3:1.7b`를 우선 사용한다. fast text 모델이 설치되어 있지 않으면 현재 선택 모델로 fallback한다. 모델 목록은 `ChatService`에서 캐시해 매 요청마다 `list_models()`를 호출하지 않는다.
+3차 구현에서는 `ModelRouter.route(request, intent, available_models)`가 모델을 결정한다. 이미지 의도는 vision 모델을 유지하고, 일반 텍스트 의도는 설치된 `MYORII_FAST_TEXT_MODEL` 또는 기본 `qwen3:1.7b`를 우선 사용한다. 코드 생성 의도는 현재 선택 모델을 사용한다. fast text 모델이 설치되어 있지 않으면 현재 선택 모델로 fallback한다. 모델 목록은 `ChatService`에서 캐시해 매 요청마다 `list_models()`를 호출하지 않는다.
 
 ---
 
@@ -315,15 +320,18 @@ large file
 * 사용자가 개수를 요청하면 가능한 한 정확히 맞춘다.
 * 코드블록 안에는 주석이나 설명을 넣지 않는다.
 
-5차 구현에서는 `ResponseFormatter`가 네이밍, 커밋 메시지, 명령어 의도를 후처리한다. 포맷 보정이 필요한 의도는 전체 응답을 버퍼링한 뒤 코드블록 중심으로 정규화하고, 일반 채팅은 기존 스트리밍을 유지한다.
+5차 구현에서는 `ResponseFormatter`가 네이밍, 짧은 단어 번역, 커밋 메시지, 명령어, 코드 생성 의도를 후처리한다. 포맷 보정이 필요한 의도는 전체 응답을 버퍼링한 뒤 코드블록 중심으로 정규화하고, 일반 채팅은 기존 스트리밍을 유지한다. 설명, 코드, 주의점이 섞인 코드 생성 응답은 설명과 주의점을 코드블록 밖 문장으로 보존하고, 실제 코드 줄만 요청 언어의 코드블록으로 감싼다.
 
 사용자 편의 출력 계약은 아래를 기준으로 한다.
 
 * 사용자가 하나를 선택해야 하는 여러 후보는 후보별 코드블록으로 분리한다.
 * 여러 명령어가 독립 실행 단계라면 명령어별 `bash` 코드블록으로 분리한다.
-* 하나의 코드 스니펫, 셸 스크립트, 줄 이어쓰기 명령은 하나의 코드블록으로 유지한다.
+* 하나의 언어 코드 스니펫, SQL, 셸 스크립트, 줄 이어쓰기 명령은 줄바꿈과 들여쓰기를 유지한 하나의 코드블록으로 유지한다.
+* 짧은 단어/용어 번역은 `text` 코드블록으로 복사 가능하게 보정한다.
+* 요약, 분석, 문서 내용 설명, 일상 대화는 코드 산출물을 요청하지 않은 한 일반 문장으로 둔다.
 * 설명, 주의점, 적용 위치, 불확실성 표시는 코드블록 밖의 채팅 문장으로 둔다.
 * 코드블록 안에는 복사할 내용만 둔다.
+* LLM이 `bash` 같은 언어 라벨을 일반 줄로 반환해도 실제 명령어만 복사 블록으로 만든다.
 
 예시:
 
@@ -476,8 +484,6 @@ LocalStore
 * `DocumentHandler`: `docx` 문단/표 텍스트 일부 추출
 * `SpreadsheetHandler`: 시트명, 컬럼명, 샘플 행 요약
 * `PresentationHandler`: 슬라이드별 텍스트 요약, 디자인/이미지/차트/표 구조/발표자 노트/수치 계산 제외
-* `TextHandler`로 txt/md/json/csv 일부 본문 전달
-* 이후 pdf/docx/xlsx/pptx handler 확장
 
 ## Phase 7: 저장 세션
 

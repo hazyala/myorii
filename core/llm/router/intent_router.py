@@ -16,6 +16,52 @@ class IntentRoute:
 class IntentRouter:
     """Classifies requests with local rules before prompt/model routing."""
 
+    _CODE_OUTPUT_KEYWORDS = (
+        "코드 줘",
+        "코드 작성",
+        "코드 만들어",
+        "코드 짜",
+        "코드로",
+        "코드블록",
+        "코드 블록",
+        "code block",
+        "파이썬 코드",
+        "python code",
+        "자바 코드",
+        "java code",
+        "html",
+        "css",
+        "c언어",
+        "c 언어",
+        "c code",
+        "c++",
+        "cpp",
+        "c#",
+        "csharp",
+        "sql문",
+        "sql 문",
+        "sql 쿼리",
+        "쿼리문",
+        "query",
+        "정규식",
+        "regex",
+        "스크립트",
+        "script",
+    )
+    _CODE_CONTEXT_KEYWORDS = (
+        "코드",
+        "함수",
+        "클래스",
+        "메서드",
+        "메소드",
+        "파일",
+        "에러",
+        "오류",
+        "버그",
+        "스택트레이스",
+        "stack trace",
+        "exception",
+    )
     _NAMING_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ("naming_function", ("함수명", "함수 이름", "function name")),
         ("naming_method", ("메서드명", "메소드명", "method name")),
@@ -60,11 +106,13 @@ class IntentRouter:
             return naming_route
         if self._contains_any(text, ("번역", "영어로", "한국어로", "일본어로", "translate")):
             return IntentRoute(intent="translate", reason="translate_keyword")
+        if self._contains_any(text, self._CODE_OUTPUT_KEYWORDS):
+            return IntentRoute(intent="code_generation", reason="code_output_keyword")
         if self._contains_any(text, ("명령어", "설치", "실행", "터미널", "command", "cli")):
             return IntentRoute(intent="command", reason="command_keyword")
         if self._contains_any(text, ("고쳐줘", "수정해줘", "버그", "에러", "오류", "fix")):
             return IntentRoute(intent="code_fix", reason="fix_keyword")
-        if self._contains_any(text, ("설명해줘", "분석해줘", "이 코드", "코드 설명")):
+        if self._is_code_explain_request(text):
             return IntentRoute(intent="code_explain", reason="explain_keyword")
 
         return IntentRoute(intent="simple_chat", reason="fallback")
@@ -92,6 +140,13 @@ class IntentRouter:
             return IntentRoute(intent="document_question", reason="document_attachment")
 
         return None
+
+    def _is_code_explain_request(self, text: str) -> bool:
+        if self._contains_any(text, ("이 코드", "코드 설명")):
+            return True
+        if not self._contains_any(text, ("설명해줘", "분석해줘")):
+            return False
+        return self._contains_any(text, self._CODE_CONTEXT_KEYWORDS)
 
     def _route_naming(self, text: str) -> IntentRoute | None:
         for intent, keywords in self._NAMING_PATTERNS:

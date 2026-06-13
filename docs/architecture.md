@@ -171,23 +171,6 @@ DB 파일은 `~/Library/Application Support/Myorii/myorii.db`에 저장된다.
 `ord` 컬럼은 float으로 저장하고, 할 일 드래그 재정렬 완료 시 현재 UI 순서대로 다시 번호를 부여한다.  
 V3 클라우드 동기화 시 `chat_attachments`에 `remote_url` 컬럼을 추가해 로컬 파일 없이 URL 접근을 지원한다.
 
-### 역할
-
-* 메모 저장
-* 설정 저장
-* 세션 저장
-
-### 구성
-
-```text
-storage/
-├── database.py
-├── memo_repository.py
-└── settings_repository.py
-```
-
----
-
 # MVP 기능 흐름
 
 ## 네이밍
@@ -357,7 +340,7 @@ MainWindow toggle_at(icon_geometry)
 * `ChatWorker`를 통한 워커 스레드 기반 토큰 스트리밍
 * `ModelListWorker`를 통한 설정 모델 목록 비동기 로딩
 
-채팅 메시지는 `ChatService`가 현재 세션 히스토리를 보관하고, 라우터 계층이 즉시 응답, 의도 분류, 프롬프트 프로필, 모델 선택, 응답 포맷 보정을 처리한 뒤 `OllamaClient`에 스트리밍 요청을 보내는 방식으로 렌더링한다. 모델 목록은 시작 시 기본 모델만 먼저 보여준 뒤 워커 스레드에서 설치 모델을 채워 메인 스레드의 Ollama 호출을 피한다. 응답 완료 후에는 파일명, 함수명, 변수명, 명령어처럼 복사 대상이 되는 기술 항목을 별도 코드블록으로 승격해 개별 복사를 지원한다. 여러 후보는 후보별 코드블록으로 분리하고, 하나의 코드 스니펫이나 셸 스크립트는 하나의 코드블록으로 유지한다.
+채팅 메시지는 `ChatService`가 현재 세션 히스토리를 보관하고, 라우터 계층이 즉시 응답, 의도 분류, 프롬프트 프로필, 모델 선택, 응답 포맷 보정을 처리한 뒤 `OllamaClient`에 스트리밍 요청을 보내는 방식으로 렌더링한다. Ollama 요청은 thinking 모델이 사고 과정만 스트리밍하고 답변 content를 비우는 상황을 막기 위해 `think=False`로 호출한다. 모델 목록은 시작 시 기본 모델만 먼저 보여준 뒤 워커 스레드에서 설치 모델을 채워 메인 스레드의 Ollama 호출을 피한다. 응답 완료 후에는 파일명, 함수명, 변수명, 클래스명, 명령어, Python/Java/HTML/CSS/C 계열 코드, SQL, 정규식, 짧은 단어 번역처럼 복사 대상이 되는 개발 산출물을 별도 코드블록으로 렌더링해 개별 복사를 지원한다. 여러 후보는 후보별 코드블록으로 분리하고, 하나의 언어 코드 스니펫, SQL, 셸 스크립트는 줄바꿈과 들여쓰기를 유지한 하나의 코드블록으로 유지한다. 설명, 코드, 주의점이 함께 있는 응답은 실제 화면에서도 텍스트와 코드블록 위젯 순서를 유지한다. 요약, 분석, 문서 내용 설명, 일상 대화는 사용자가 코드나 명령어를 요청하지 않는 한 일반 문장으로 표시한다.
 
 파일 첨부는 `ChatView`가 전송 전 로컬 파일 경로를 입력부 상태로 보관하고, 입력창 위 미리보기 카드로 표시한다. 전송 시 화면에는 첨부 파일을 사용자 메시지 버블 본문에 섞지 않고 버블 상단 바깥의 미리보기 카드로 렌더링한다. 전송 후 첨부 카드가 한 줄 폭을 넘으면 가로로 넘치지 않고 다음 줄로 재배치한다. LLM 요청 텍스트에는 첨부 파일명을 함께 전달한다. 이미지 첨부는 `ChatAttachmentPayload`로 `ChatWorker`, `ChatService`, `OllamaClient`까지 전달하고, `ImageHandler`가 base64로 변환해 Ollama 요청의 `messages[].images`에 포함한다. `AttachmentRouter`는 비이미지 첨부를 handler에 위임한다. `TextHandler`는 `txt`, `md`, `json`, `yaml`, `yml` 첨부 본문 일부를 `AttachmentContext`로 추출하고, `CsvHandler`는 `csv`, `tsv` 첨부의 컬럼명과 샘플 행을 `AttachmentContext`로 요약한다. `PdfHandler`는 `pdf` 첨부의 일부 페이지 텍스트를 추출하되 스캔/OCR/표 구조 분석은 지원하지 않는다. `DocxHandler`는 `docx` 첨부의 문단/표 텍스트 일부를 추출하되 서식, 이미지, 주석, 변경 추적, 매크로는 분석하지 않는다. `XlsxHandler`는 `xlsx` 첨부의 시트명, 컬럼명, 샘플 행을 요약하되 전체 행 분석, 수식 재계산, 피벗/차트/서식 분석은 지원하지 않는다. `PptxHandler`는 `pptx` 첨부의 슬라이드별 텍스트를 추출하되 PPT 제작, 디자인 생성, 이미지/차트/표 구조 분석, 발표자 노트, 수치 계산은 지원하지 않는다. `AttachmentContext`는 읽은 범위와 지원 한계를 `제한`, `주의` 문구로 포함한다. `ChatService`는 추출된 context를 user message 본문과 metadata에 추가해 모델 요청에 포함한다. 지원 파일은 이미지(`png`, `jpg`, `jpeg`, `gif`, `bmp`), 텍스트(`txt`, `md`, `json`, `yaml`, `yml`), 표 텍스트(`csv`, `tsv`), 문서/오피스(`pdf`, `docx`, `xlsx`, `pptx`)로 제한하고, 지원하지 않는 파일은 Assistant 메시지로 오류를 렌더링한다.
 
