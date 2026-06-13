@@ -566,6 +566,11 @@ class MessageBubble(QWidget):
             return
 
         segments = self._markdown_segments()
+        if self._should_preserve_markdown_order(segments):
+            self._body.setMarkdown(self._text)
+            self._body.set_code_ranges(self._code_ranges())
+            return
+
         text_parts = [text for kind, text in segments if kind == "text" and text.strip()]
         self._body.setMarkdown("\n\n".join(text_parts))
         self._body.set_code_ranges([])
@@ -583,6 +588,16 @@ class MessageBubble(QWidget):
             self._bubble_layout.removeWidget(block)
             block.deleteLater()
         self._rendered_code_blocks.clear()
+
+    @staticmethod
+    def _should_preserve_markdown_order(segments: list[tuple[str, str]]) -> bool:
+        seen_code = False
+        for kind, text in segments:
+            if kind == "code":
+                seen_code = True
+            elif kind == "text" and text.strip() and seen_code:
+                return True
+        return False
 
     def _markdown_segments(self) -> list[tuple[str, str]]:
         segments: list[tuple[str, str]] = []

@@ -58,8 +58,10 @@ class ResponseFormatter:
         if not candidates:
             return text
 
-        blocks = [f"```{language}\n{candidate}\n```" for candidate in candidates]
-        return "가장 무난한 후보입니다.\n\n" + "\n\n".join(blocks)
+        blocks = "\n\n".join(f"```{language}\n{candidate}\n```" for candidate in candidates)
+        if self._wants_candidates_only(request.user_message.content):
+            return blocks
+        return "가장 무난한 후보입니다.\n\n" + blocks
 
     def _format_translation(self, text: str, request: ChatRequest) -> str:
         if not _is_short_translation_request(request.user_message.content):
@@ -206,6 +208,11 @@ class ResponseFormatter:
         if not match:
             return None
         return max(1, min(int(match.group(1)), 10))
+
+    @staticmethod
+    def _wants_candidates_only(text: str) -> bool:
+        normalized = re.sub(r"\s+", " ", text.strip().lower())
+        return "만" in normalized or any(keyword in normalized for keyword in ("only", "just"))
 
     @staticmethod
     def _first_result_line(text: str) -> str:
