@@ -19,13 +19,16 @@ class PdfHandler:
 
     def extract(self, attachment: ChatAttachmentPayload) -> AttachmentContext:
         path = Path(attachment.path)
-        text, page_count, used_fallback = self._extract_text(path)
+        text, page_count, used_fallback, extraction_warnings = self._extract_text(path)
         body, truncated = self._truncate(text)
-        warnings = []
+        warnings = list(extraction_warnings)
         if used_fallback:
             warnings.append("pypdf를 사용할 수 없어 제한적인 PDF 텍스트 추출을 사용했습니다.")
         if not body:
-            warnings.append("추출 가능한 텍스트가 없습니다. 스캔 PDF이거나 이미지 기반 PDF일 수 있습니다.")
+            if used_fallback:
+                warnings.append("pypdf 의존성 누락으로 PDF 텍스트를 충분히 확인하지 못했습니다.")
+            else:
+                warnings.append("추출 가능한 텍스트가 없습니다. 스캔 PDF이거나 이미지 기반 PDF일 수 있습니다.")
         if truncated:
             warnings.append("본문이 잘렸습니다.")
 
@@ -55,20 +58,40 @@ class PdfHandler:
     def supports(self, attachment: ChatAttachmentPayload) -> bool:
         return Path(attachment.path).suffix.lower() in self.SUPPORTED_SUFFIXES
 
-    def _extract_text(self, path: Path) -> tuple[str, int | None, bool]:
+    def _extract_text(self, path: Path) -> tuple[str, int | None, bool, tuple[str, ...]]:
         try:
             from pypdf import PdfReader  # type: ignore[import-not-found]
         except ImportError:
-            return self._extract_text_fallback(path), None, True
+            return self._extract_text_fallback(path), None, True, ()
 
         try:
             reader = PdfReader(str(path))
             texts = []
             for page in reader.pages[: self._max_pages]:
                 texts.append(page.extract_text() or "")
-            return "\n\n".join(text.strip() for text in texts if text.strip()), len(reader.pages), False
+            text = "\n\n".join(text.strip() for text in texts if text.strip())
+            if self._is_low_quality_text(text):
+                pdfminer_text = self._extract_text_with_pdfminer(path)
+                if pdfminer_text and not self._is_low_quality_text(pdfminer_text):
+                    return pdfminer_text, len(reader.pages), False, ()
+                return "", len(reader.pages), False, (
+                    "PDF 텍스트 추출 결과가 깨진 문자 위주라 내용을 충분히 확인하지 못했습니다.",
+                )
+            return text, len(reader.pages), False, ()
         except Exception:
-            return self._extract_text_fallback(path), None, True
+            return self._extract_text_fallback(path), None, True, ()
+
+    def _extract_text_with_pdfminer(self, path: Path) -> str:
+        try:
+            from pdfminer.high_level import extract_text  # type: ignore[import-not-found]
+        except ImportError:
+            return ""
+
+        try:
+            text = extract_text(str(path), page_numbers=list(range(self._max_pages)))
+        except Exception:
+            return ""
+        return text.strip()
 
     def _extract_text_fallback(self, path: Path) -> str:
         try:
@@ -95,6 +118,16 @@ class PdfHandler:
         for source, target in replacements.items():
             value = value.replace(source, target)
         return value
+
+    def _is_low_quality_text(self, text: str) -> bool:
+        normalized = re.sub(r"\s+", "", text)
+        if not normalized:
+            return False
+        replacement_chars = sum(1 for char in normalized if char in {"■", "□", "\ufffd"})
+        readable_chars = sum(1 for char in normalized if char.isalnum() or "\uac00" <= char <= "\ud7a3")
+        if replacement_chars >= 3 and replacement_chars / len(normalized) >= 0.2:
+            return True
+        return len(normalized) >= 20 and readable_chars / len(normalized) < 0.2
 
     def _truncate(self, text: str) -> tuple[str, bool]:
         normalized = text.strip()

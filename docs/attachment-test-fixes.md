@@ -10,7 +10,7 @@
 | ATTACH-FIX-002 | 응답 상태 | ATTACH-NORMAL-006 | `sample.csv` 첨부 후 응답이 CSV 요약이 아니라 무관한 문장과 `id`만 담긴 부분 코드블록처럼 표시됨. 후속 질문에서도 "커널이 첨부된 데이터를 직접 읽지 못했다"고 답하며 컬럼 리스트와 `id` 주변 출력이 깨짐 | CSV 컬럼명과 샘플 행 요약이 하나의 Assistant 응답으로 정상 렌더링되어야 하며, 실패 시 실제 실패 지점을 명확히 안내해야 함 | 미수정 |
 | ATTACH-FIX-003 | context 한도 | ATTACH-NORMAL-010 | `sample.jpeg` 첨부 요청에서 `request (4921 tokens) exceeds the available context size (4096 tokens)` 원시 API 오류가 노출됨 | 원시 오류 대신 메시지 버블에 "대화가 길어져 응답 용량이 초과되었습니다. 새로운 대화를 시작해주세요."처럼 사용자가 이해할 수 있는 안내를 표시해야 함. 이후 히스토리 축약 또는 첨부 context 제한도 검토 필요 | 미수정 |
 | ATTACH-FIX-004 | 응답 포맷 | ATTACH-NORMAL-011 | `sample.gif` 분석 응답에서 요청하지 않은 코드 예시가 생성되고, `sample.gif` 단독 코드블록과 Python 코드블록이 분리되어 표시됨 | 이미지 설명 요청에는 이미지 요약만 답하고, 사용자가 요청하지 않은 코드 예시는 생성하지 않아야 함 | 미수정 |
-| ATTACH-FIX-005 | PDF 의존성/추출 | ATTACH-NORMAL-013 | `sample.pdf`는 5페이지 텍스트 PDF이지만 앱 런타임에 `pypdf`가 없어 fallback 추출로 내려가고, 결과적으로 "스캔된 이미지 기반 PDF"처럼 잘못 안내함 | 런타임/패키징에 `pypdf`를 포함하고, 의존성 누락과 실제 텍스트 없음/OCR 미지원 상황을 구분해 안내해야 함 | 미수정 |
+| ATTACH-FIX-005 | PDF 의존성/추출 | ATTACH-NORMAL-013 | `sample.pdf`는 5페이지 텍스트 PDF이지만 앱 런타임에 `pypdf`가 없어 fallback 추출로 내려가고, 결과적으로 "스캔된 이미지 기반 PDF"처럼 잘못 안내함 | 런타임/패키징에 `pypdf`를 포함하고, 의존성 누락과 실제 텍스트 없음/OCR 미지원 상황을 구분해 안내해야 함 | 수정 완료 |
 | ATTACH-FIX-006 | XLSX 경로 파싱 | ATTACH-NORMAL-015, ATTACH-EDGE-009 | `sample.xlsx`에서 "XLSX 파일을 읽을 수 없어요: sample.xlsx" 오류 발생. workbook relationship target이 `/xl/worksheets/sheet1.xml`인데 `XlsxHandler`가 `xl/`을 중복으로 붙여 존재하지 않는 경로를 읽으려 함 | relationship target이 `/xl/...`, `worksheets/...`, `../...` 등 어떤 형태여도 zip 내부 실제 경로로 정규화해야 함 | 수정 완료 |
 | ATTACH-FIX-007 | 채팅 UX | 긴 메시지 버블 드래그 | 긴 메시지 버블에서 텍스트를 드래그할 때 현재 보이는 화면까지만 선택되고, 화면 상단/하단 경계 밖으로 계속 드래그할 수 없음 | 메시지 버블 또는 코드블록 위에서 마우스 드래그 중 포인터가 스크롤 영역 상단/하단에 가까워지면 채팅 영역이 자동 스크롤되어 긴 응답을 이어서 선택할 수 있어야 함 | 수정 완료 |
 | ATTACH-FIX-008 | 마크다운 렌더링 | ATTACH-EDGE-004 | `invalid.yaml` 응답에서 번호 목록, 들여쓰기, YAML 예시가 여러 코드블록으로 쪼개져 표시되고 일부 텍스트가 줄바꿈/계층 구조를 잃음 | 마크다운 답변의 목록, 들여쓰기, 코드블록을 하나의 일관된 서식으로 렌더링하고 불필요한 코드블록 분리를 막아야 함 | 미수정 |
@@ -29,7 +29,7 @@
 | 손상된 이미지 | ATTACH-EDGE-006 | 이미지 디코딩 실패를 원시 API 오류로 노출하지 않고 사용자용 메시지 버블로 안내 |
 | context 한도 초과 | ATTACH-NORMAL-010, ATTACH-EDGE-002 | 요청 생성 전 토큰 예산을 확인하고, 초과 시 원시 API 오류 대신 메시지 버블에 새 대화 시작 안내를 표시 |
 | 긴 대화/복수 첨부 안정성 | 첨부 전반 | 대화 히스토리와 첨부 context가 누적될 때 응답 품질이 깨지지 않도록 토큰 예산, 히스토리 절단, 첨부 개수 제한 또는 사용자 안내 정책이 필요함 |
-| PDF 추출 의존성 누락 | ATTACH-NORMAL-013 | `pypdf` 누락 시 스캔 PDF로 오진하지 않고 PDF 추출 라이브러리 누락 또는 제한적 추출 상태를 구분해 안내 |
+| PDF 추출 의존성 누락 | ATTACH-NORMAL-013 | `pypdf`/`pdfminer.six`를 런타임과 패키징에 포함하고, 의존성 누락과 실제 텍스트 없음/OCR 미지원 상태를 구분해 안내 |
 | XLSX relationship 경로 차이 | ATTACH-NORMAL-015, ATTACH-EDGE-009 | workbook relationship target을 표준 OOXML 경로 규칙에 맞게 정규화하고, 실패 시 어떤 sheet 경로를 읽지 못했는지 내부 로그로 확인 가능해야 함 |
 | 메시지 버블 드래그 자동 스크롤 | 긴 메시지 버블 드래그 | 긴 메시지 버블 또는 코드블록에서 마우스로 텍스트를 드래그하는 동안 스크롤 영역 가장자리에 접근하면 자동으로 위/아래 스크롤되어 이어서 선택할 수 있어야 함 |
 | 미지원 파일 드래그 오류 중복 | ATTACH-EDGE-011, ATTACH-EDGE-012 | 미지원 파일은 드롭 완료 시점에만 오류를 1회 표시하고, 드래그 이동 중에는 반복 오류 메시지를 만들지 않아야 함 |
@@ -43,3 +43,4 @@
 * ATTACH-FIX-011: 미지원 파일은 drag enter/move/hover 단계에서 오류 메시지를 만들지 않고, 실제 drop 완료 시점에만 지원하지 않는 파일 형식 오류를 1회 표시하도록 수정했다. 사용자 수동 테스트에서 `edge_cases/unsupported.exe`, `edge_cases/unsupported.zip` 모두 정상 반영을 확인했다.
 * ATTACH-FIX-007: 긴 메시지 버블과 코드블록에서 마우스 드래그 중 포인터가 채팅 스크롤 영역 상단/하단에 가까워지면 자동 스크롤되도록 수정했다. 사용자 수동 테스트에서 정상 반영을 확인했다.
 * ATTACH-FIX-006: XLSX workbook relationship target을 OOXML part 경로 규칙에 맞게 정규화해 `/xl/...`, `worksheets/...`, `../...` 형태의 sheet target을 읽을 수 있도록 수정했다. 사용자 수동 테스트에서 정상 XLSX와 빈 시트 XLSX 모두 파일 읽기 오류 없이 시트/컬럼/샘플 행 또는 빈 시트 상태를 표시하는 것을 확인했다. 단, 동일 요약 문구가 반복되는 응답 안정성 문제는 `ATTACH-FIX-009` 범위에서 별도 처리한다.
+* ATTACH-FIX-005: PDF 런타임 의존성에 `pypdf`와 보조 추출기 `pdfminer.six`를 포함하고, macOS 패키징 hidden import에 반영했다. `pypdf` 결과가 깨진 문자 위주이면 `pdfminer.six`로 재시도하며, 의존성 누락과 실제 텍스트 없음 안내를 분리했다. 사용자 수동 테스트에서 `pypdf` 누락 안내가 사라지고 PDF 텍스트 추출 경로가 동작하는 것을 확인했다. 단, 동일 답변 반복, 추출 텍스트 과해석, 짧은 PDF 조각의 코드블록 카드 분리 렌더링은 `ATTACH-FIX-008`/`ATTACH-FIX-009` 범위에서 별도 처리한다.
