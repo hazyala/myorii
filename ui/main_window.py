@@ -176,7 +176,7 @@ class MainWindow(QMainWindow):
 
     def toggle_at(self, icon_geometry: QRect) -> None:
         if self.isVisible():
-            self.hide()
+            self._hide_window()
             return
 
         self.move(self._position_for(icon_geometry))
@@ -263,7 +263,7 @@ class MainWindow(QMainWindow):
         close.setObjectName("closeButton")
         close.setFixedSize(32, 32)
         close.setCursor(Qt.CursorShape.PointingHandCursor)
-        close.clicked.connect(self.hide)
+        close.clicked.connect(self._hide_window)
 
         layout.addWidget(avatar)
         layout.addLayout(title_row)
@@ -278,6 +278,11 @@ class MainWindow(QMainWindow):
 
     def _show_main_view(self) -> None:
         self._page_stack.setCurrentIndex(0)
+
+    def _hide_window(self) -> None:
+        if hasattr(self, "_chat_view"):
+            self._chat_view.discard_unsaved_session()
+        self.hide()
 
     def _update_available_models(self, models: list[str]) -> None:
         self._settings_view.update_models(models)
@@ -510,7 +515,10 @@ TabButton:hover {
 }
 
 #chatScrollArea QWidget,
-#chatScrollContent {
+#chatScrollContent,
+#chatConversationPage,
+#chatHistoryView,
+#chatHistoryListContent {
     background: transparent;
 }
 
@@ -609,6 +617,83 @@ QScrollBar::sub-line:vertical {
     color: #565f6e;
     font-size: 12px;
     font-weight: 550;
+}
+
+#chatHistoryHeader {
+    background: rgba(255, 255, 255, 116);
+    border-bottom: 1px solid rgba(222, 227, 235, 150);
+}
+
+#chatHistoryBackButton {
+    background: transparent;
+    border: none;
+    color: #555c68;
+    font-size: 24px;
+    font-weight: 500;
+}
+
+#chatHistoryBackButton:hover {
+    background: rgba(238, 242, 247, 160);
+    border-radius: 12px;
+}
+
+#chatHistoryHeaderTitle {
+    color: #20242c;
+    font-size: 14px;
+    font-weight: 750;
+}
+
+#chatHistoryCount {
+    color: #69707c;
+    font-size: 12px;
+    font-weight: 650;
+}
+
+#chatHistoryScrollArea {
+    background: transparent;
+    border: none;
+}
+
+#chatHistoryItem {
+    background: #ffffff;
+    border: 1px solid rgba(222, 227, 235, 180);
+    border-radius: 8px;
+}
+
+#chatHistoryItem[dragging="true"] {
+    background: #f4f8ff;
+    border: 1px solid rgba(47, 128, 255, 120);
+}
+
+#chatHistoryItem:hover {
+    background: #f7f9fc;
+}
+
+#chatHistoryTitle {
+    color: #20242c;
+    font-size: 14px;
+    font-weight: 750;
+}
+
+#chatHistoryDate,
+#chatHistoryEmpty {
+    color: #7c8491;
+    font-size: 12px;
+    font-weight: 550;
+}
+
+#chatHistoryDeleteButton {
+    background: transparent;
+    border: none;
+    color: #8a93a1;
+    font-size: 14px;
+    font-weight: 650;
+}
+
+#chatHistoryDeleteButton:hover {
+    background: rgba(238, 242, 247, 180);
+    border-radius: 11px;
+    color: #f04452;
 }
 
 #promptWrap {

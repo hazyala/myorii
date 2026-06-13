@@ -171,6 +171,8 @@ DB 파일은 `~/Library/Application Support/Myorii/myorii.db`에 저장된다.
 `ord` 컬럼은 float으로 저장하고, 할 일/메모/채팅 기록 드래그 재정렬 완료 시 현재 UI 순서대로 다시 번호를 부여한다.  
 V3 클라우드 동기화 시 `chat_attachments`에 `remote_url` 컬럼을 추가해 로컬 파일 없이 URL 접근을 지원한다.
 
+채팅 세션은 대화 기록 저장 스위치가 켜진 대화만 생성한다. 기록 목록은 `chat_sessions.ord` 기준으로 정렬하며, 세션 삭제 시 `chat_messages`와 `chat_attachments`는 FK cascade로 함께 삭제된다.
+
 # MVP 기능 흐름
 
 ## 네이밍
