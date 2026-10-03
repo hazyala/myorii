@@ -59,6 +59,10 @@ get_connection = _connect
 
 
 _TABLE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS preferences (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS chat_sessions (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     title       TEXT    NOT NULL DEFAULT '새 대화',

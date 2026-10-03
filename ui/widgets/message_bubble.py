@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ui.preferences import set_local_style, color
+
 from dataclasses import dataclass
 import re
 
@@ -68,11 +70,11 @@ class CodeHighlighter(QSyntaxHighlighter):
         self._code_format.setFontFixedPitch(True)
         self._code_format.setFontPointSize(12)
         self._keyword_format = QTextCharFormat(self._code_format)
-        self._keyword_format.setForeground(QColor("#2f80ff"))
+        self._keyword_format.setForeground(color("#2f80ff"))
         self._string_format = QTextCharFormat(self._code_format)
-        self._string_format.setForeground(QColor("#16845b"))
+        self._string_format.setForeground(color("#16845b"))
         self._comment_format = QTextCharFormat(self._code_format)
-        self._comment_format.setForeground(QColor("#7c8797"))
+        self._comment_format.setForeground(color("#7c8797"))
 
     def set_ranges(self, ranges: list[tuple[int, int]]) -> None:
         self._ranges = ranges
@@ -109,8 +111,7 @@ class CodeTextBrowser(QTextBrowser):
         super().__init__()
         self._code_ranges: list[tuple[int, int, str]] = []
         self._highlighter = CodeHighlighter(self.document())
-        self.setStyleSheet(
-            """
+        set_local_style(self, """
             QTextBrowser {
                 background: transparent;
                 border: none;
@@ -131,8 +132,7 @@ class CodeTextBrowser(QTextBrowser):
                 font-family: Menlo;
                 font-size: 12px;
             }
-            """
-        )
+            """)
 
     def setMarkdown(self, markdown: str) -> None:  # noqa: N802
         super().setMarkdown(markdown)
@@ -179,11 +179,9 @@ class CodeBlockWidget(QFrame):
         self.setObjectName("codeBlockFrame")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setStyleSheet(
-            "background: rgba(232, 238, 247, 218);"
+        set_local_style(self, "background: rgba(232, 238, 247, 218);"
             "border: 1px solid rgba(255, 255, 255, 190);"
-            "border-radius: 8px;"
-        )
+            "border-radius: 8px;")
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(10)
         shadow.setOffset(0, 2)
@@ -206,7 +204,7 @@ class CodeBlockWidget(QFrame):
         copy.setFixedSize(26, 24)
         copy.setFlat(True)
         copy.setCursor(Qt.CursorShape.PointingHandCursor)
-        copy.setStyleSheet("background: transparent; border: none; padding: 0;")
+        set_local_style(copy, "background: transparent; border: none; padding: 0;")
         copy.clicked.connect(self.copy_code)
         header.addWidget(copy)
         layout.addLayout(header)
@@ -215,8 +213,8 @@ class CodeBlockWidget(QFrame):
         self._body.setPlainText(code)
         self._body.set_code_ranges([(0, len(code), code)])
         self._body.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._body.setStyleSheet("background: transparent; border: none;")
-        self._body.viewport().setStyleSheet("background: transparent;")
+        set_local_style(self._body, "background: transparent; border: none;")
+        set_local_style(self._body.viewport(), "background: transparent;")
         self._body.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._body.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._body.document().setDocumentMargin(0)
@@ -235,7 +233,7 @@ class CodeBlockWidget(QFrame):
         painter.setPen(QPen(QColor(61, 75, 95, 85), 1.4))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawRoundedRect(5, 2, 8, 9, 2, 2)
-        painter.setPen(QPen(QColor("#3d4b5f"), 1.7))
+        painter.setPen(QPen(color("#3d4b5f"), 1.7))
         painter.drawRoundedRect(2, 5, 9, 9, 2, 2)
         painter.end()
         return QIcon(pixmap)
@@ -347,9 +345,9 @@ class MessageBubble(QWidget):
         self._bubble.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._bubble.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Minimum)
         if role == "user":
-            self._bubble.setStyleSheet("background: #2f80ff; border-radius: 14px;")
+            set_local_style(self._bubble, "background: #2f80ff; border-radius: 14px;")
         else:
-            self._bubble.setStyleSheet("background: #ffffff; border: none; border-radius: 14px;")
+            set_local_style(self._bubble, "background: #ffffff; border: none; border-radius: 14px;")
 
         self._bubble_layout = QVBoxLayout(self._bubble)
         self._bubble_layout.setContentsMargins(12, 9, 12, 9)
@@ -360,9 +358,7 @@ class MessageBubble(QWidget):
             self._body.setWordWrap(True)
             self._body.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             self._body.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Minimum)
-            self._body.setStyleSheet(
-                "background: transparent; border: none; color: #ffffff; font-size: 13px;"
-            )
+            set_local_style(self._body, "background: transparent; border: none; color: #ffffff; font-size: 13px;")
         else:
             self._body = CodeTextBrowser()
             self._body.setFrameShape(QFrame.Shape.NoFrame)
@@ -548,14 +544,14 @@ class MessageBubble(QWidget):
         layout = QHBoxLayout(indicator)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
-        icon = tinted_icon("foot.png", QColor("#f04452"), QSize(14, 14))
+        icon = tinted_icon("foot.png", color("#f04452"), QSize(14, 14))
         for _index in range(3):
             paw = QLabel()
             paw.setObjectName("pawLoadingDot")
             paw.setFixedSize(16, 22)
             paw.setPixmap(icon.pixmap(14, 14))
             paw.setContentsMargins(0, 6, 0, 0)
-            paw.setStyleSheet("background: transparent; border: none;")
+            set_local_style(paw, "background: transparent; border: none;")
             layout.addWidget(paw)
         return indicator
 

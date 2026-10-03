@@ -23,6 +23,7 @@ class EmptyModelResponse(RuntimeError):
 
 class ChatService:
     def __init__(self, model: str = DEFAULT_MODEL, client: OllamaClient | None = None) -> None:
+        self._provider = "ollama"
         self._model = model
         self._client = client or OllamaClient()
         self._intent_router = IntentRouter()
@@ -41,15 +42,26 @@ class ChatService:
         self._model = model or DEFAULT_MODEL
         self._model_router = ModelRouter()
 
+    def set_backend(self, provider: str, model: str) -> None:
+        if provider not in ("ollama","openai","gemini","anthropic"):
+            raise ValueError("Unknown provider")
+        self._provider = provider
+        self._model = model
+        self._model_cache = None
+
+    def invalidate_models(self) -> None:
+        self._model_cache = None
+
     def warmup(self) -> None:
-        self._client.warmup(self._model)
+        if self._provider == "ollama": self._client.warmup(self._model)
 
     def available_models(self) -> list[str]:
+        if self._provider != "ollama": return [self._model] if self._model else []
         try:
             models = self._list_models_cached()
         except OllamaNotRunning:
-            return [DEFAULT_MODEL]
-        return [DEFAULT_MODEL, *(model for model in models if model != DEFAULT_MODEL)]
+            return []
+        return models
 
     def clear(self) -> None:
         self._messages.clear()
@@ -98,6 +110,7 @@ class ChatService:
         user_text: str,
         attachments: tuple[ChatAttachmentPayload, ...] = (),
     ) -> Iterator[str]:
+        provider = self._provider
         text = user_text.strip()
         if not text and not attachments:
             return
@@ -121,7 +134,7 @@ class ChatService:
         if len(system_prompt) + len(user_message.content) > 12000:
             raise ContextLimitExceeded("입력 내용이 너무 길어요. 내용을 나누어 보내주세요.")
         request = replace(request, history=self._request_history(route.intent, text, system_prompt))
-        models = self._list_models_cached()
+        models = self._list_models_cached() if provider == "ollama" else [self._model]
         model_route = self._model_router.route(request, route.intent, tuple(models))
         if model_route.model not in models:
             raise ModelNotFound(f"모델이 설치돼 있지 않아요: {model_route.model}")
@@ -144,7 +157,11 @@ class ChatService:
         )
 
         assistant_text = ""
-        stream = self._client.stream_chat(request.model, request.messages())
+        if provider == "ollama":
+            stream = self._client.stream_chat(request.model, request.messages())
+        else:
+            from core.llm.cloud_client import CloudClient
+            stream = CloudClient(provider).stream_chat(request.model, request.messages())
         if self._response_formatter.should_buffer(route.intent):
             assistant_text = "".join(stream)
             assistant_text = self._response_formatter.format(assistant_text, route.intent, request)

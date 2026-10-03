@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from ui.preferences import set_local_style
+
+from ui.preferences import (tr, localized_label, localized_button, set_localized_text, set_localized_placeholder, color, stylesheet)
+
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from mimetypes import guess_type
@@ -199,7 +203,7 @@ class ChatHistoryDragHandle(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor("#cdd2db"))
+        painter.setBrush(color("#cdd2db"))
         for row in range(3):
             for col in range(2):
                 painter.drawEllipse(col * 6 + 1, row * 6 + 1, 3, 3)
@@ -407,7 +411,7 @@ class ChatHistoryView(QWidget):
         self._list_layout.setContentsMargins(self.LIST_MARGIN_X, 9, self.LIST_MARGIN_X, 10)
         self._list_layout.setSpacing(self.ITEM_GAP)
         self._list_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self._empty_label = QLabel("저장된 채팅이 없습니다.")
+        self._empty_label = localized_label("저장된 채팅이 없습니다.")
         self._empty_label.setObjectName("chatHistoryEmpty")
         self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._list_layout.addWidget(self._empty_label)
@@ -429,7 +433,7 @@ class ChatHistoryView(QWidget):
         back.setCursor(Qt.CursorShape.PointingHandCursor)
         back.clicked.connect(self.back_requested.emit)
 
-        self._title_label = QLabel("채팅 기록")
+        self._title_label = localized_label("채팅 기록")
         self._title_label.setObjectName("chatHistoryHeaderTitle")
         self._count_label = QLabel("0")
         self._count_label.setObjectName("chatHistoryCount")
@@ -520,7 +524,7 @@ class ChatInput(QTextEdit):
     def __init__(self) -> None:
         super().__init__()
         self.setObjectName("promptInput")
-        self.setPlaceholderText("무엇을 도와줄까?")
+        set_localized_placeholder(self, "무엇을 도와줄까?")
         self.setAcceptRichText(False)
         self.setAcceptDrops(True)
         self.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
@@ -717,7 +721,7 @@ class ChatView(QWidget):
         input_actions = QHBoxLayout()
         input_actions.setSpacing(7)
 
-        history_list = QPushButton("채팅 기록")
+        history_list = localized_button("채팅 기록")
         history_list.setObjectName("historyListButton")
         history_list.setIcon(self._list_icon())
         history_list.setIconSize(QSize(15, 15))
@@ -725,7 +729,7 @@ class ChatView(QWidget):
         history_list.setCursor(Qt.CursorShape.PointingHandCursor)
         history_list.clicked.connect(self._show_history)
 
-        history_label = QLabel("대화 기록 저장")
+        history_label = localized_label("대화 기록 저장")
         history_label.setObjectName("historyLabel")
         self._history_switch = SwitchButton()
         self._history_switch.setObjectName("historySwitch")
@@ -790,7 +794,7 @@ class ChatView(QWidget):
         pixmap.fill(Qt.GlobalColor.transparent)
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(QPen(QColor("#565f6e"), 1.7))
+        painter.setPen(QPen(color("#565f6e"), 1.7))
         for y in (4, 8, 12):
             painter.drawPoint(3, y)
             painter.drawLine(6, y, 13, y)

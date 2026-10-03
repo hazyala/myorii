@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from ui.preferences import set_local_style, language
+
+from ui.preferences import (tr, localized_label, localized_button, set_localized_text, set_localized_placeholder, color, stylesheet)
+
 from datetime import datetime
 
 from PyQt6.QtCore import QEvent, QPoint, QRect, QSize, Qt, QTimer
@@ -77,13 +81,13 @@ class CheckBox(QWidget):
         path.addRoundedRect(rect.x(), rect.y(), rect.width(), rect.height(), 5, 5)
 
         if self._checked:
-            painter.fillPath(path, QColor("#2f80ff"))
-            painter.setPen(QPen(QColor("#ffffff"), 1.8))
+            painter.fillPath(path, color("#2f80ff"))
+            painter.setPen(QPen(color("#ffffff"), 1.8))
             cx, cy = rect.center().x(), rect.center().y()
             painter.drawLine(cx - 4, cy, cx - 1, cy + 3)
             painter.drawLine(cx - 1, cy + 3, cx + 4, cy - 3)
         else:
-            painter.setPen(QPen(QColor("#cdd2db"), 1.5))
+            painter.setPen(QPen(color("#cdd2db"), 1.5))
             painter.drawPath(path)
 
         painter.end()
@@ -127,7 +131,7 @@ class DragHandle(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor("#cdd2db"))
+        painter.setBrush(color("#cdd2db"))
         for row in range(3):
             for col in range(2):
                 painter.drawEllipse(col * 6 + 1, row * 6 + 1, 3, 3)
@@ -188,10 +192,10 @@ class TodoItem(QFrame):
             self._apply_undone_style()
 
     def _apply_done_style(self) -> None:
-        self._label.setStyleSheet("color: #b0b8c8; text-decoration: line-through;")
+        set_local_style(self._label, "color: #b0b8c8; text-decoration: line-through;")
 
     def _apply_undone_style(self) -> None:
-        self._label.setStyleSheet("color: #20242c; text-decoration: none;")
+        set_local_style(self._label, "color: #20242c; text-decoration: none;")
 
     def eventFilter(self, watched, event) -> bool:  # noqa: N802
         if watched is self._label:
@@ -319,13 +323,14 @@ class TodoView(QWidget):
         cal_label.setFixedSize(20, 20)
         cal_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         cal_label.setPixmap(
-            tinted_icon("calendar.png", QColor("#20242c"), QSize(17, 17)).pixmap(17, 17)
+            tinted_icon("calendar.png", color("#20242c"), QSize(17, 17)).pixmap(17, 17)
         )
 
-        today_label = QLabel("오늘")
+        today_label = localized_label("오늘")
         today_label.setObjectName("todoTodayLabel")
 
         date_label = QLabel(day_str)
+        self._date_label = date_label
         date_label.setObjectName("todoDateLabel")
 
         layout.addWidget(cal_label)
@@ -335,6 +340,16 @@ class TodoView(QWidget):
 
         return frame
 
+    def update_date_header(self) -> None:
+        from datetime import date
+        today = date.today()
+        if language() == "en":
+            text = today.strftime("%b %d (%a)")
+        else:
+            weekdays = ["월", "화", "수", "목", "금", "토", "일"]
+            text = f"{today.month}월 {today.day}일 ({weekdays[today.weekday()]})"
+        self._date_label.setText(text)
+
     def _build_add_bar(self) -> QWidget:
         self._add_bar = QFrame()
         self._add_bar.setObjectName("todoAddBar")
@@ -342,7 +357,7 @@ class TodoView(QWidget):
         bar_layout.setContentsMargins(0, 0, 0, 0)
         bar_layout.setSpacing(0)
 
-        self._add_btn = QPushButton("+ 할일 추가")
+        self._add_btn = localized_button("+ 할일 추가")
         self._add_btn.setObjectName("todoAddButton")
         self._add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._add_btn.clicked.connect(self.show_add_input)
@@ -356,7 +371,7 @@ class TodoView(QWidget):
 
         self._input = QLineEdit()
         self._input.setObjectName("todoInput")
-        self._input.setPlaceholderText("할 일을 입력하세요...")
+        set_localized_placeholder(self._input, "할 일을 입력하세요...")
         self._input.returnPressed.connect(self._commit_input)
 
         cancel_btn = QPushButton("x")
@@ -478,10 +493,10 @@ class TodoView(QWidget):
                 layout = QHBoxLayout(header)
                 layout.setContentsMargins(0, 6, 0, 3)
                 label = QLabel(datetime.fromisoformat(day).strftime("%Y.%m.%d"))
-                label.setStyleSheet("color: #87909e; font-size: 11px; background: transparent;")
+                set_local_style(label, "color: #87909e; font-size: 11px; background: transparent;")
                 line = QFrame()
                 line.setFixedHeight(1)
-                line.setStyleSheet("background: rgba(150, 160, 175, 65); border: none;")
+                set_local_style(line, "background: rgba(150, 160, 175, 65); border: none;")
                 layout.addWidget(label)
                 layout.addWidget(line, 1)
                 self._date_headers.append(header)
