@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from storage import preferences_store, model_store
+from ui import preferences
+
 import socket
 import threading
 import sys
@@ -13,6 +16,7 @@ from PyQt6.QtGui import (
     QPainter,
     QPainterPath,
     QPixmap,
+    QPalette,
     QPolygonF,
 )
 from PyQt6.QtWidgets import (
@@ -90,7 +94,7 @@ class PopoverSurface(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         path = self._surface_path()
-        painter.fillPath(path, QColor(255, 255, 255, 242))
+        painter.fillPath(path, QColor(24, 30, 40, 248) if preferences.theme() == "dark" else QColor(255, 255, 255, 242))
         painter.setPen(QColor(226, 231, 239, 150))
         painter.drawPath(path)
 
@@ -119,7 +123,8 @@ class PopoverSurface(QWidget):
 
 class TabButton(QPushButton):
     def __init__(self, label: str, icon_name: str, active: bool = False) -> None:
-        super().__init__(label)
+        super().__init__(preferences.tr(label))
+        self.setProperty("i18nSource",label)
         self._icon_name = icon_name
         self.setCheckable(True)
         self.setChecked(active)
@@ -139,7 +144,7 @@ class TabButton(QPushButton):
         self._refresh_icon()
 
     def _refresh_icon(self, hovered: bool = False) -> None:
-        color = QColor("#2f80ff") if self.isChecked() or hovered else QColor("#555c68")
+        color = preferences.color("#2f80ff") if self.isChecked() or hovered else preferences.color("#667085")
         self.setIcon(tinted_icon(self._icon_name, color, QSize(16, 16)))
 
 
@@ -151,11 +156,15 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
 
+        self._preferences = preferences_store.load()
+        preferences.configure(**self._preferences)
         self.setWindowTitle("Myorii")
         self.setFixedSize(self.DEFAULT_SIZE)
         self._tabs_group = QButtonGroup(self)
         self._tabs_group.setExclusive(True)
+        backend=model_store.load()
         self._chat_service = ChatService()
+        self._chat_service.set_backend(backend["provider"],backend["models"][backend["provider"]])
         self._model_warmup_worker = ModelWarmupWorker(self._chat_service)
         self._model_list_worker = ModelListWorker(self._chat_service)
         self._model_list_worker.models_loaded.connect(self._update_available_models)
@@ -174,6 +183,43 @@ class MainWindow(QMainWindow):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
         self.setCentralWidget(self._build_window())
+        self._apply_preferences()
+
+    def _change_backend(self, provider: str, model: str) -> None:
+        model_store.save(self._settings_view._model_config)
+        # In-flight requests retain their already captured provider/model.
+        self._chat_service.set_backend(provider,model)
+
+    def _change_preference(self, key: str, value: str) -> None:
+        preferences_store.save(key,value)
+        self._preferences[key] = value
+        self._apply_preferences()
+
+    def _apply_preferences(self) -> None:
+        preferences.configure(**self._preferences)
+        palette = self.palette()
+        for role, value in ((QPalette.ColorRole.Window,"#ffffff"), (QPalette.ColorRole.Base,"#ffffff"), (QPalette.ColorRole.Button,"#ffffff"), (QPalette.ColorRole.Text,"#20242c"), (QPalette.ColorRole.WindowText,"#20242c"), (QPalette.ColorRole.ButtonText,"#20242c")):
+            palette.setColor(role,preferences.color(value))
+        self.setPalette(palette)
+        self.setStyleSheet(preferences.stylesheet(STYLE_SHEET))
+        for widget in self.findChildren(QWidget):
+            icon_name = widget.property("themeIcon")
+            if icon_name:
+                icon = tinted_icon(icon_name, preferences.color("#20242c"), QSize(21,21))
+                if isinstance(widget,QLabel): widget.setPixmap(icon.pixmap(widget.size()))
+                elif isinstance(widget,QPushButton): widget.setIcon(icon)
+        preferences.apply_local_styles(self)
+        preferences.retranslate(self)
+        highlighter = self._memo_view._editor._highlighter
+        # Rebuild color formats without replacing the document or cursor.
+        highlighter.refresh_palette()
+        highlighter.set_active_block(self._memo_view._editor._editor.textCursor().blockNumber())
+        highlighter.rehighlight()
+        self._memo_view._editor._editor.refresh_block_styles()
+        for button in self._tabs_group.buttons():
+            button._refresh_icon()
+        self._todo_view.update_date_header()
+        self.centralWidget().update()
 
     def toggle_at(self, icon_geometry: QRect) -> None:
         if self.isVisible():
@@ -196,16 +242,11 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(14, 32, 14, 14)
         layout.setSpacing(0)
 
+        # One header and tab bar for every screen, including settings.
+        layout.addLayout(self._header())
+        layout.addSpacing(10)
+        layout.addWidget(self._tabs())
         layout.addWidget(self._page_stack, 1)
-
-        main_page = QWidget()
-        main_layout = QVBoxLayout(main_page)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
-        main_layout.addLayout(self._header())
-        main_layout.addSpacing(10)
-        main_layout.addWidget(self._tabs())
-        main_layout.addWidget(self._content_stack, 1)
 
         self._chat_view = ChatView(self._chat_service)
         self._content_stack.addWidget(self._content_panel("chatPanel"))
@@ -213,12 +254,14 @@ class MainWindow(QMainWindow):
         self._content_stack.addWidget(self._content_panel("memoPanel"))
         self._content_stack.setCurrentIndex(0)
 
-        self._settings_view = SettingsView()
+        self._settings_view = SettingsView(preferences=self._preferences)
+        self._settings_view.theme_changed.connect(lambda value: self._change_preference("theme",value))
+        self._settings_view.language_changed.connect(lambda value: self._change_preference("language",value))
         self._settings_view.back_requested.connect(self._show_main_view)
-        self._settings_view.model_changed.connect(self._chat_view.set_model)
-        self._page_stack.addWidget(main_page)
+        self._settings_view.backend_changed.connect(self._change_backend)
+        self._page_stack.addWidget(self._content_stack)
         self._page_stack.addWidget(self._settings_view)
-        self._page_stack.setCurrentWidget(main_page)
+        self._page_stack.setCurrentWidget(self._content_stack)
         self._model_warmup_worker.start()
         self._model_list_worker.start()
 
@@ -230,6 +273,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(10)
 
         avatar = QLabel()
+        avatar.setObjectName("sharedAvatar")
         avatar.setFixedSize(44, 44)
         avatar.setPixmap(
             QPixmap(str(asset_path("characters", "myorii_profile.png"))).scaled(
@@ -255,6 +299,7 @@ class MainWindow(QMainWindow):
 
         settings = QPushButton()
         settings.setObjectName("iconButton")
+        settings.setProperty("themeIcon", "settings.png")
         settings.setIcon(QIcon(str(asset_path("icons", "settings.png"))))
         settings.setIconSize(QSize(21, 21))
         settings.setFixedSize(36, 36)
@@ -276,7 +321,14 @@ class MainWindow(QMainWindow):
         return layout
 
     def _show_settings_view(self) -> None:
-        self._page_stack.setCurrentWidget(self._settings_view)
+        if self._page_stack.currentWidget() is self._settings_view:
+            self._show_main_view()
+        else:
+            self._page_stack.setCurrentWidget(self._settings_view)
+
+    def _select_content_tab(self, index: int) -> None:
+        self._content_stack.setCurrentIndex(index)
+        self._show_main_view()
 
     def _show_main_view(self) -> None:
         self._page_stack.setCurrentIndex(0)
@@ -292,7 +344,7 @@ class MainWindow(QMainWindow):
     def _set_online_status(self, online: bool) -> None:
         color = "#32d17c" if online else "#f04452"
         text = "온라인" if online else "오프라인"
-        self._status_text.setText(text)
+        preferences.set_localized_text(self._status_text,text)
         self._status_dot.setStyleSheet(f"background: {color}; border-radius: 4px;")
 
     def _tabs(self) -> QWidget:
@@ -311,7 +363,7 @@ class MainWindow(QMainWindow):
         for index, button in enumerate((chat, todo, memo)):
             self._tabs_group.addButton(button, index)
 
-        self._tabs_group.idClicked.connect(self._content_stack.setCurrentIndex)
+        self._tabs_group.idClicked.connect(self._select_content_tab)
 
         layout.addWidget(chat)
         layout.addWidget(todo)
@@ -371,12 +423,12 @@ class MainWindow(QMainWindow):
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
-        self.setStyleSheet(STYLE_SHEET)
+        self.setStyleSheet(preferences.stylesheet(STYLE_SHEET))
         self._keep_open_on_deactivate()
 
     def _keep_open_on_deactivate(self) -> None:
         # 바깥 클릭(앱 비활성화) 시 자동으로 숨지 않도록. 아이콘 재클릭으로만 닫힘.
-        if sys.platform != "darwin":
+        if sys.platform != "darwin" or QGuiApplication.platformName() != "cocoa":
             return
         try:
             import objc
@@ -495,6 +547,7 @@ TabButton:hover {
 }
 
 #chatPanel,
+#settingsPanel,
 #todoPanel,
 #memoPanel {
     background: rgba(255, 255, 255, 132);
@@ -805,10 +858,6 @@ QScrollBar::sub-line:vertical {
     border: none;
 }
 
-#settingsPanel {
-    background: transparent;
-}
-
 #settingsTitle {
     color: #11131a;
     font-size: 20px;
@@ -883,14 +932,36 @@ QScrollBar::sub-line:vertical {
     color: #2f80ff;
 }
 
+#modelPopupList,
+#modelPopupList::viewport,
+QComboBox QAbstractItemView {
+    background: #ffffff;
+    color: #20242c;
+    selection-background-color: #2f80ff;
+    selection-color: #ffffff;
+    border: 1px solid #dfe4ed;
+    outline: none;
+}
+
+#apiKeyInput {
+    background: #ffffff;
+    color: #20242c;
+    border: 1px solid #dfe4ed;
+    border-radius: 8px;
+    padding: 5px 8px;
+}
+
 #modelComboBox {
     background: #ffffff;
     border: 1px solid #dfe4ed;
     border-radius: 9px;
     color: #2b3038;
-    padding: 0 10px;
+    padding: 0 30px 0 10px;
     font-size: 12px;
 }
+
+#modelComboBox::drop-down { border: none; width: 0px; }
+#modelComboBox::down-arrow { image: none; width: 0px; height: 0px; }
 
 #secondaryButton,
 #ghostActionButton {

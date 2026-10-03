@@ -188,6 +188,61 @@ class StabilityTests(unittest.TestCase):
             self.assertEqual(len(view._date_headers),1)
             view.close()
 
+    def test_settings_shares_header_and_panel_geometry(self):
+        from PyQt6.QtWidgets import QLabel
+        from ui.main_window import MainWindow
+        with tempfile.TemporaryDirectory() as folder, patch('storage.database.db_path',return_value=Path(folder)/'test.db'), patch('ui.main_window.ModelWarmupWorker.start'), patch('ui.main_window.ModelListWorker.start'), patch('ui.main_window.InternetStatusWatcher.check_now'):
+            database.initialize()
+            window = MainWindow(); window.show(); app.processEvents()
+            avatar = window.findChild(QLabel,'sharedAvatar')
+            original_avatar = avatar.mapTo(window, avatar.rect().topLeft())
+            original_panel = window._content_stack.geometry()
+            for index in range(3):
+                window._select_content_tab(index); app.processEvents()
+                self.assertEqual(avatar.mapTo(window, avatar.rect().topLeft()),original_avatar)
+            window._show_settings_view(); app.processEvents()
+            self.assertEqual(avatar.size().width(),44)
+            self.assertEqual(avatar.mapTo(window, avatar.rect().topLeft()),original_avatar)
+            self.assertEqual(window._settings_view.geometry(),original_panel)
+            self.assertEqual(window.size().width(),430)
+            self.assertLessEqual(window._settings_view.width(),402)
+            window._select_content_tab(1); app.processEvents()
+            self.assertIs(window._page_stack.currentWidget(),window._content_stack)
+            self.assertEqual(window._content_stack.currentIndex(),1)
+            window.close()
+
+    def test_preferences_controls_persistence_and_content(self):
+        from storage import preferences_store
+        from ui.main_window import MainWindow
+        from ui import preferences
+        with tempfile.TemporaryDirectory() as folder, patch('storage.database.db_path',return_value=Path(folder)/'test.db'), patch('ui.main_window.ModelWarmupWorker.start'), patch('ui.main_window.ModelListWorker.start'), patch('ui.main_window.InternetStatusWatcher.check_now'):
+            database.initialize()
+            window = MainWindow(); window.show(); app.processEvents()
+            window._chat_view._prompt.setPlainText('사용자가 쓰던 내용')
+            window._memo_view._editor._editor.setPlainText('# 내 메모')
+            window._show_settings_view()
+            QTest.mouseClick(window._settings_view.theme_control._buttons[1],Qt.MouseButton.LeftButton)
+            QTest.mouseClick(window._settings_view.language_control._buttons[1],Qt.MouseButton.LeftButton)
+            app.processEvents()
+            self.assertEqual(preferences_store.load(),{'theme':'dark','language':'en'})
+            self.assertEqual(window._settings_view.theme_control._buttons[0].text(),'Light')
+            self.assertEqual(window._tabs_group.button(0).text(),'Chat')
+            self.assertEqual(window._chat_view._prompt.placeholderText(),'How can I help?')
+            self.assertEqual(window._chat_view._prompt.toPlainText(),'사용자가 쓰던 내용')
+            self.assertEqual(window._memo_view._editor._editor.toPlainText(),'# 내 메모')
+            self.assertIn('#e4eaf2',window.styleSheet())
+            reopened = MainWindow()
+            self.assertTrue(reopened._settings_view.theme_control._buttons[1].isChecked())
+            self.assertTrue(reopened._settings_view.language_control._buttons[1].isChecked())
+            QTest.mouseClick(window._settings_view.theme_control._buttons[0],Qt.MouseButton.LeftButton)
+            QTest.mouseClick(window._settings_view.language_control._buttons[0],Qt.MouseButton.LeftButton)
+            app.processEvents()
+            self.assertEqual(window._tabs_group.button(0).text(),'채팅')
+            self.assertEqual(preferences_store.load(),{'theme':'light','language':'ko'})
+            with self.assertRaises(ValueError): preferences_store.save('theme','bad')
+            window.close(); reopened.close()
+        preferences.configure(theme='light',language='ko')
+
     def test_nested_prose_and_code_rendering(self):
         text = '1. **컬럼**\n   - 이름: 상품\n   - 가격: 100\n2. **샘플**\n   - 값: 사과\n\n```python\ndef f():\n    return 1\n```\n\n주의: 확인하세요.'
         bubble = MessageBubble('assistant',text)

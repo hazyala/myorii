@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from ui.preferences import set_local_style
+
+from ui.preferences import (tr, localized_label, localized_button, set_localized_text, set_localized_placeholder, color, stylesheet)
+
 import re
 from datetime import datetime, timezone
 
@@ -53,35 +57,37 @@ def preview_line(markdown: str) -> str:
 class MarkdownHighlighter(QSyntaxHighlighter):
     def __init__(self, document) -> None:
         super().__init__(document)
+        self.refresh_palette()
 
+    def refresh_palette(self) -> None:
         self._headings = []
         for size in (23, 19, 16, 14, 13, 13):
             fmt = QTextCharFormat()
-            fmt.setForeground(QColor("#11131a"))
+            fmt.setForeground(color("#11131a"))
             fmt.setFontPointSize(size)
             fmt.setFontWeight(QFont.Weight.Bold)
             self._headings.append(fmt)
 
         self._marker = QTextCharFormat()
-        self._marker.setForeground(QColor("#2f80ff"))
+        self._marker.setForeground(color("#2f80ff"))
         self._marker.setFontWeight(QFont.Weight.DemiBold)
 
         self._hidden_marker = QTextCharFormat()
         self._hidden_marker.setForeground(QColor(0, 0, 0, 0))
         self._hidden_marker.setFontPointSize(1)
         self._editing_marker = QTextCharFormat()
-        self._editing_marker.setForeground(QColor("#98a2b3"))
+        self._editing_marker.setForeground(color("#98a2b3"))
         self._editing_marker.setFontPointSize(12)
         self._active_block = -1
 
         self._code = QTextCharFormat()
-        self._code.setForeground(QColor("#344054"))
+        self._code.setForeground(color("#344054"))
         self._code.setFontFamily("Menlo")
         self._code.setFontPointSize(12)
 
         self._inline_code = QTextCharFormat(self._code)
-        self._inline_code.setBackground(QColor("#e8eef7"))
-        self._inline_code.setForeground(QColor("#2d405a"))
+        self._inline_code.setBackground(color("#e8eef7"))
+        self._inline_code.setForeground(color("#2d405a"))
 
         self._bold = QTextCharFormat()
         self._bold.setFontWeight(QFont.Weight.Bold)
@@ -93,11 +99,11 @@ class MarkdownHighlighter(QSyntaxHighlighter):
         self._strike.setFontStrikeOut(True)
 
         self._link = QTextCharFormat()
-        self._link.setForeground(QColor("#2f80ff"))
+        self._link.setForeground(color("#2f80ff"))
         self._link.setFontUnderline(True)
 
         self._quote = QTextCharFormat()
-        self._quote.setForeground(QColor("#667085"))
+        self._quote.setForeground(color("#667085"))
         self._quote.setFontItalic(True)
 
     def set_active_block(self, number: int) -> None:
@@ -316,7 +322,7 @@ class MemoTextEdit(QTextEdit):
                 block_format.setTopMargin(0)
                 block_format.setBottomMargin(0)
             elif in_code:
-                block_format.setBackground(QColor("#eef3fa"))
+                block_format.setBackground(color("#eef3fa"))
                 block_format.setLeftMargin(14)
                 block_format.setRightMargin(14)
                 block_format.setTopMargin(3)
@@ -327,7 +333,7 @@ class MemoTextEdit(QTextEdit):
                 block_format.setTopMargin(3)
                 block_format.setBottomMargin(3)
             elif stripped.startswith('" '):
-                block_format.setBackground(QColor("#f6f8fb"))
+                block_format.setBackground(color("#f6f8fb"))
                 block_format.setLeftMargin(12)
                 block_format.setRightMargin(8)
                 block_format.setTopMargin(4)
@@ -371,7 +377,7 @@ class MemoTextEdit(QTextEdit):
 
     def _paint_code_block_backgrounds(self, painter: QPainter) -> None:
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor("#eef3fa"))
+        painter.setBrush(color("#eef3fa"))
         for top, bottom in self._code_block_ranges():
             rect = QRectF(self.viewport().rect().adjusted(8, 0, -8, 0))
             rect.setTop(top)
@@ -386,7 +392,7 @@ class MemoTextEdit(QTextEdit):
             if stripped.startswith('" '):
                 rect = self.cursorRect(QTextCursor(block))
                 x = max(9, rect.left() - 8)
-                painter.setBrush(QColor("#cfd8e6"))
+                painter.setBrush(color("#cfd8e6"))
                 painter.drawRoundedRect(x, rect.top() - 1, 3, rect.height() + 4, 1.5, 1.5)
             block = block.next()
 
@@ -398,11 +404,11 @@ class MemoTextEdit(QTextEdit):
                 rect = self._checkbox_rect(block)
                 checked = marker.lower() in ("- [x]", "[x]")
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-                painter.setPen(QColor("#9aa6b8") if not checked else QColor("#2f80ff"))
-                painter.setBrush(QColor("#2f80ff") if checked else QColor("#ffffff"))
+                painter.setPen(color("#9aa6b8") if not checked else color("#2f80ff"))
+                painter.setBrush(color("#2f80ff") if checked else color("#ffffff"))
                 painter.drawRoundedRect(rect, 3, 3)
                 if checked:
-                    painter.setPen(QColor("#ffffff"))
+                    painter.setPen(color("#ffffff"))
                     painter.drawLine(int(rect.left()) + 3, int(rect.center().y()), int(rect.left()) + 6, int(rect.bottom()) - 4)
                     painter.drawLine(int(rect.left()) + 6, int(rect.bottom()) - 4, int(rect.right()) - 3, int(rect.top()) + 4)
             block = block.next()
@@ -508,7 +514,7 @@ class MemoDragHandle(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor("#cdd2db"))
+        painter.setBrush(color("#cdd2db"))
         for row in range(3):
             for col in range(2):
                 painter.drawEllipse(col * 6 + 1, row * 6 + 1, 3, 3)
@@ -730,7 +736,7 @@ class MemoEditor(QFrame):
         back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         back_btn.clicked.connect(self._parent_view.show_list)
 
-        self._save_state = QLabel("저장됨")
+        self._save_state = localized_label("저장됨")
         self._save_state.setObjectName("memoSaveState")
 
         top_row.addWidget(back_btn)
@@ -739,7 +745,7 @@ class MemoEditor(QFrame):
 
         self._editor = MemoTextEdit()
         self._editor.setObjectName("memoTextEdit")
-        self._editor.setPlaceholderText("Markdown으로 메모를 작성하세요...")
+        set_localized_placeholder(self._editor, "Markdown으로 메모를 작성하세요...")
         self._editor.setAcceptRichText(False)
         self._editor.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
         self._editor.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
@@ -763,7 +769,7 @@ class MemoEditor(QFrame):
         self._editor.blockSignals(False)
         self._update_active_syntax()
         self._editor.refresh_block_styles()
-        self._save_state.setText("저장됨")
+        set_localized_text(self._save_state, "저장됨")
         QTimer.singleShot(0, self._editor.setFocus)
 
     def save_now(self) -> None:
@@ -781,11 +787,11 @@ class MemoEditor(QFrame):
         updated = memo_store.update(self._memo.id, title[:80], body)
         if updated is not None:
             self._memo = updated
-        self._save_state.setText("저장됨")
+        set_localized_text(self._save_state, "저장됨")
         self._parent_view.refresh_list()
 
     def _schedule_save(self) -> None:
-        self._save_state.setText("저장 중...")
+        set_localized_text(self._save_state, "저장 중...")
         self._save_timer.start()
 
 
@@ -842,9 +848,9 @@ class MemoView(QWidget):
 
         note_icon = QLabel()
         note_icon.setFixedSize(20, 20)
-        note_icon.setPixmap(tinted_icon("memo.png", QColor("#20242c"), QSize(17, 17)).pixmap(17, 17))
+        note_icon.setPixmap(tinted_icon("memo.png", color("#20242c"), QSize(17, 17)).pixmap(17, 17))
 
-        self._count_label = QLabel("내 메모 0")
+        self._count_label = localized_label("내 메모 0")
         self._count_label.setObjectName("memoCountLabel")
 
         layout.addWidget(note_icon)
@@ -859,9 +865,9 @@ class MemoView(QWidget):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(8)
 
-        self._add_btn = QPushButton("새로운 메모")
+        self._add_btn = localized_button("새로운 메모")
         self._add_btn.setObjectName("memoAddButton")
-        self._add_btn.setIcon(tinted_icon("memo.png", QColor("#667085"), QSize(17, 17)))
+        self._add_btn.setIcon(tinted_icon("memo.png", color("#667085"), QSize(17, 17)))
         self._add_btn.setIconSize(QSize(17, 17))
         self._add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._add_btn.clicked.connect(self.create_memo)
@@ -896,7 +902,7 @@ class MemoView(QWidget):
         self._clear_items()
         for memo in memos:
             self._insert_item(memo)
-        self._count_label.setText(f"내 메모 {len(memos)}")
+        set_localized_text(self._count_label, "내 메모 {count}", count=len(memos))
 
     def delete_memo(self, item: MemoCard) -> None:
         memo_store.delete(item.memo_id)
