@@ -1,0 +1,4 @@
+이것은 TextHandler 테스트용 일반 텍스트 파일입니다.
+This is a normal text file for testing TextHandler.
+두 번째 줄, 세 번째 줄도 포함되어 있습니다.
+Line 4: 한글과 English가 섞여 있습니다.

@@ -1,0 +1,25 @@
+{
+  "title": "샘플 JSON 파일",
+  "description": "TextHandler 또는 별도 JSON 파싱 테스트용",
+  "items": [
+    {
+      "id": 1,
+      "name": "사과",
+      "price": 1000
+    },
+    {
+      "id": 2,
+      "name": "바나나",
+      "price": 800
+    },
+    {
+      "id": 3,
+      "name": "오렌지",
+      "price": 1200
+    }
+  ],
+  "meta": {
+    "created_by": "gen_samples.py",
+    "valid": true
+  }
+}
