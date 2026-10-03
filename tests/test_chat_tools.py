@@ -76,6 +76,21 @@ class ChatToolTests(unittest.TestCase):
         self.assertIn('찾지 못했습니다', ''.join(service.send('/todo 방금 답변 요약해서 저장해줘')))
         self.assertEqual(len(todo_store.get_all()), 1)
 
+    def test_reference_alias_and_plan_context_budget(self):
+        service, client = self.service(plan('add', 'memo', source='text', content='wrong'))
+        history = [ChatMessagePayload(role, 'x' * 3000) for _ in range(10) for role in ('user', 'assistant')]
+        service.set_history(history)
+        list(service.send('/memo 그거 저장해줘'))
+        self.assertEqual(memo_store.get_all()[0].body, history[-1].content)
+        self.assertLessEqual(sum(len(m.content) for m in client.requests[0][1]), 12000)
+
+    def test_oversized_summary_does_not_save_truncated_content(self):
+        service, _ = self.service(plan('add', content='invented'))
+        service.set_history([ChatMessagePayload('user', '원문' * 10000), ChatMessagePayload('assistant', '답변')])
+        with self.assertRaises(ToolPlanError):
+            list(service.send('/todo 방금 한말 요약해서 저장해줘'))
+        self.assertEqual(todo_store.get_all(), [])
+
     def test_pending_only_and_empty(self):
         todo_store.add('미완료')
         done = todo_store.add('완료')

@@ -10,6 +10,7 @@ from core.llm.contracts import ChatMessagePayload
 from storage import memo_store, todo_store
 
 TAG_PATTERN = re.compile(r"(?<!\S)/(todo|memo)(?= )")
+REFERENCE_PATTERN = re.compile(r"방금|이전|앞서|위의|위 내용|그거|그걸|그것|마지막")
 
 
 class ToolPlanError(RuntimeError):
@@ -55,8 +56,14 @@ class ChatTools:
     def execute(self, text: str, history: tuple[ChatMessagePayload, ...]) -> tuple[str, str] | None:
         target = tool_target(text)
         # Only recent complete exchanges are needed to resolve "방금" references.
-        recent = history[-12:]
-        context = [{"role": m.role, "content": m.content[:6000]} for m in recent]
+        context = []
+        budget = 6000
+        for message in reversed(history[-12:]):
+            excerpt = message.content[:min(3000, budget)]
+            if not excerpt:
+                break
+            context.insert(0, {"role": message.role, "content": excerpt})
+            budget -= len(excerpt)
         plan = self._json(PLAN_PROMPT, {
             "today": date.today().isoformat(), "tag_target": target,
             "previous_conversation": context, "current_request": text,
@@ -72,13 +79,15 @@ class ChatTools:
         if action == "add":
             if not re.search(r"추가|저장|적어|적기|기록|넣어|써\s*줘|\badd\b|\bsave\b", text, re.I):
                 raise ToolPlanError("저장할 내용을 추가 또는 저장해달라고 요청해주세요.")
-            if not history and re.search(r"방금|이전|앞서|위의|한\s*말|답변", text):
+            if not history and REFERENCE_PATTERN.search(text):
                 return "저장할 이전 대화를 찾지 못했습니다. 내용을 직접 입력해주세요.", "tool_empty"
             content = self._string(plan, "content")
             source = plan.get("source", "text")
-            refers_back = bool(re.search(r"방금|이전|앞서|위의", text))
+            refers_back = bool(REFERENCE_PATTERN.search(text))
             if refers_back or source in ("previous_user", "previous_assistant"):
-                role = "assistant" if re.search(r"답변|답장|답을|응답", text) else "user"
+                role = "user" if re.search(r"한\s*말|내가|내\s*말|사용자", text) else "assistant"
+                if source == "previous_user" and not re.search(r"답변|답장|답을|응답", text):
+                    role = "user"
                 if not refers_back:
                     role = "user" if source == "previous_user" else "assistant"
                 previous = next((m for m in reversed(history) if m.role == role
@@ -177,8 +186,11 @@ class ChatTools:
         return [r for r in records if r['id'] in ids]
 
     def _json(self, prompt: str, data: dict) -> dict:
+        encoded = json.dumps(data, ensure_ascii=False)
+        if len(prompt) + len(encoded) > 12000:
+            raise ToolPlanError("참고할 내용이 너무 깁니다. 저장할 내용이나 검색 요청을 나누어 입력해주세요.")
         raw = self._complete([ChatMessagePayload("system", prompt),
-                              ChatMessagePayload("user", json.dumps(data, ensure_ascii=False))]).strip()
+                              ChatMessagePayload("user", encoded)]).strip()
         raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.S).strip()
         if raw.startswith('```'):
             raw = re.sub(r'^```(?:json)?\s*|\s*```$', '', raw)
