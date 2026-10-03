@@ -16,6 +16,10 @@ def initialize() -> None:
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
+    message_columns = {row["name"] for row in conn.execute("PRAGMA table_info(chat_messages)")}
+    if "model_content" not in message_columns:
+        conn.execute("ALTER TABLE chat_messages ADD COLUMN model_content TEXT")
+
     columns = {
         row["name"]
         for row in conn.execute("PRAGMA table_info(chat_sessions)").fetchall()

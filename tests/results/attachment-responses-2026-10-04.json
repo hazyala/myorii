@@ -1,0 +1,50 @@
+[
+  {
+    "case": "CSV",
+    "stage": "initial",
+    "prompt": "첨부한 CSV 파일의 컬럼명과 샘플 행을 요약해줘.",
+    "answer": "**컬럼명**:  \n`id`, `name`, `category`, `price`, `stock`\n\n**샘플 행**:  \n- id: 1 | name: 사과 | category: 과일 | price: 1000 | stock: 50  \n- id: 2 | name: 바나나 | category: 과일 | price: 800 | stock: 30  \n- id: 3 | name: 우유 | category: 유제품 | price: 2500 | stock: 20  \n- id: 4 | name: 계란 | category: 신선식품 | price: 6000 | stock: 15  \n- id: 5 | name: 빵 | category: 베이커리 | price: 3500 | stock: 10\n\n> ※ 전체 데이터 분석, 통계 계산 등은 지원하지 않음.",
+    "seconds": 8.11,
+    "intent": "spreadsheet_question"
+  },
+  {
+    "case": "CSV",
+    "stage": "followup",
+    "prompt": "첨부 데이터에서 사과의 가격과 재고가 얼마인지 알려줘.",
+    "answer": "사과의 가격은 **1000**, 재고는 **50**입니다.",
+    "seconds": 0.89,
+    "intent": "spreadsheet_question"
+  },
+  {
+    "case": "GIF",
+    "stage": "initial",
+    "prompt": "첨부한 이미지 분석해서 어떤건지 요약해줘.",
+    "answer": "이미지는 텍스트만 포함된 간단한 슬라이드 또는 화면 캡처입니다.\n\n**요약:**\n- **텍스트 내용:** `\"sample.gif - ImageHandler test\"`\n- **의미:** `sample.gif` 파일을 처리하는 `ImageHandler` 테스트를 의미합니다.\n- **추론:** 이미지 파일이 존재하더라도, 이미지 그 자체가 보이지 않습니다. (단지 이름과 테스트 목적을 나타냄)\n\n→ 파일 `sample.gif`는 존재하지만, 그 내용을 볼 수 없는 이미지 파일입니다. `ImageHandler` 테스트를 위한 테스트 파일로 보입니다.",
+    "seconds": 12.11,
+    "intent": "image_question"
+  },
+  {
+    "case": "GIF",
+    "stage": "followup",
+    "prompt": "방금 이미지에 실제로 보이는 글자를 알려줘. 코드는 쓰지 마.",
+    "answer": "sample.gif - ImageHandler test",
+    "seconds": 0.39,
+    "intent": "image_question"
+  },
+  {
+    "case": "YAML",
+    "stage": "initial",
+    "prompt": "첨부한 YAML 파일을 읽고 주요 내용을 요약해줘.",
+    "answer": "첨부된 YAML 파일은 **잘못된 형식**입니다.\n\n### 주요 오류 요약:\n- **문자열 키 `price` 후에 값 `1000`이 붙어 있지만, 키와 값 사이에 콜론(:)이 빠져 있습니다.**\n  → `price 1000` → `price: 1000`이어야 합니다.\n- **들여쓰기 오류**\n  → `id: 1` 다음에 `name: 들여쓰기오류`는 정확히 2칸 들여쓰기로 표현되어야 합니다. 현재는 `name: 들여쓰기오류`가 1칸 들여쓰기로 되어 있어 형식 오류가 발생합니다.\n- `items` 배열 내 요소는 하나의 항목으로만 정의되어 있으며, **필요한 구조가 누락되거나 불완전합니다.**\n\n### 해결 방향:\ntitle: 잘못된 YAML\nitems:\n  - id: 1\n    name: 들여쓰기오류\n    price: 1000\n\n→ 위와 같이 **콜론, 들여쓰기, 값 순서**를 맞춰야 정상입니다.\n\n> **참고**: YAML은 매우 민감한 형식 기반 언어입니다. 들여쓰기와 콜론의 위치, 띄어쓰기, 문장 끝에 있는 띄어쓰기 등 하나의 작은 오류로 전체 구조가 무효화될 수 있습니다.",
+    "seconds": 11.8,
+    "intent": "document_question"
+  },
+  {
+    "case": "YAML",
+    "stage": "followup",
+    "prompt": "방금 파일에서 문법이 잘못된 부분을 설명해줘. 수정 코드는 필요 없어.",
+    "answer": "### 문법 오류 설명:\n\n1. **`price 1000` → `price: 1000`**  \n   - YAML에서 키(예: `price`)와 값(예: `1000`) 사이에는 반드시 **콜론(:)**이 필요합니다.  \n   - `price 1000`은 키-값 쌍이 아닌 **문자열 결합**으로, YAML 파서는 이를 해석할 수 없습니다.\n\n2. **`name: 들여쓰기오류`의 들여쓰기 문제**  \n   - `id: 1` 뒤에 `name: 들여쓰기오류`가 **1칸** 들여쓰기로 쓰였습니다.  \n   - YAML은 **동일한 수준(동일한 수준의 키)**에 대한 요소는 **동일한 들여쓰기**로 정렬되어야 합니다.  \n   - 현재는 `id` 다음에 `name`이 1칸 더 들여쓰기로 되어 있어 형식 오류로 인식됩니다.  \n   → 정확한 YAML 구조에서 `name`은 `id`와 같은 수준(즉, `id`와 `name`이 모두 같은 레벨의 항목)으로 작성되어야 합니다.\n\n### 결과:\n이러한 오류들은 YAML 파서가 **문법 오류를 발견**하고 **파싱을 중단**하게 됩니다.  \nYAML은 **구조적 형식**이므로 문법상 하나의 오류라도 전체를 무효화할 수 있습니다.\n\n> 📌 **예시**:  \n> > items:\n>   - id: 1\n>     name: 들여쓰기오류\n>     price: 1000\n> \n> → 위는 올바른 YAML입니다.\n\n---\n\n📌 **주의**:  \nYAML은 구조 기반 언어이므로, **문자열 간 띄어쓰기, 들여쓰기, 콜론 위치 등**을 꼼꼼히 확인해야 합니다.  \n실제 YAML 파서는 이에 민감하므로, 반드시 YAML 유효성 검사 도구(예: `yamllint`, `yamlfmt`, 또는 IDE 내 체크기능)를 사용하세요.",
+    "seconds": 17.54,
+    "intent": "document_question"
+  }
+]

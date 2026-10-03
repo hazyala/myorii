@@ -683,6 +683,10 @@ class ChatView(QWidget):
 
     def _chat_scroll_area(self) -> QWidget:
         self._scroll_area = QScrollArea()
+        self._scroll_area.verticalScrollBar().rangeChanged.connect(self._on_scroll_range_changed)
+        self._scroll_area.verticalScrollBar().actionTriggered.connect(
+            lambda _action: setattr(self, "_follow_bottom", False)
+        )
         self._scroll_area.setObjectName("chatScrollArea")
         self._scroll_area.setWidgetResizable(True)
         self._scroll_area.setFrameShape(QFrame.Shape.NoFrame)
@@ -899,7 +903,11 @@ class ChatView(QWidget):
         for message in stored_messages:
             attachments = tuple(self._stored_message_attachments(message.id))
             transcript.append(TranscriptMessage(message.role, message.content, attachments))
-            service_messages.append(ChatMessagePayload(role=message.role, content=message.content))
+            service_messages.append(self._chat_service.restore_message(
+                ChatMessagePayload(role=message.role, content=message.content,
+                                   attachments=tuple(ChatAttachmentPayload.from_path(a.path) for a in attachments)),
+                message.model_content,
+            ))
 
         self._reset_conversation(clear_session=False)
         self._current_session_id = session_id
@@ -935,7 +943,8 @@ class ChatView(QWidget):
             self._history_view.refresh_list()
             return
 
-        user_row = chat_store.add_message(session_id, "user", user_message.text)
+        user_row = chat_store.add_message(session_id, "user", user_message.text,
+                                          self._chat_service.history[-2].content if len(self._chat_service.history) >= 2 else None)
         for attachment in user_message.attachments:
             chat_store.add_attachment(
                 user_row.id,
@@ -952,8 +961,10 @@ class ChatView(QWidget):
 
         session = chat_store.create_session(self._title_for_transcript())
         self._current_session_id = session.id
-        for item in self._transcript:
-            row = chat_store.add_message(session.id, item.role, item.text)
+        for index, item in enumerate(self._transcript):
+            history = self._chat_service.history
+            model_content = history[index].content if index < len(history) else None
+            row = chat_store.add_message(session.id, item.role, item.text, model_content)
             if item.role == "user":
                 for attachment in item.attachments:
                     chat_store.add_attachment(
@@ -1023,9 +1034,17 @@ class ChatView(QWidget):
         return attachments
 
     def _scroll_to_bottom(self) -> None:
-        QTimer.singleShot(0, lambda: self._scroll_area.verticalScrollBar().setValue(
-            self._scroll_area.verticalScrollBar().maximum()
-        ))
+        self._follow_bottom = True
+        QTimer.singleShot(0, self._apply_bottom_scroll)
+
+    def _apply_bottom_scroll(self) -> None:
+        self._message_layout.activate()
+        bar = self._scroll_area.verticalScrollBar()
+        bar.setValue(bar.maximum())
+
+    def _on_scroll_range_changed(self, _minimum: int, maximum: int) -> None:
+        if getattr(self, "_follow_bottom", True):
+            self._scroll_area.verticalScrollBar().setValue(maximum)
 
     def _available_message_width(self) -> int:
         viewport_width = self._scroll_area.viewport().width()

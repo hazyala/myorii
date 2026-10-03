@@ -134,6 +134,7 @@ class IntentRouter:
             return None
 
         text = _normalize(request.user_message.content)
+        text = re.sub(r"(?:수정\s*)?코드(?:는|를|\s)?\s*(?:쓰지\s*마|필요\s*없어|없이)", "", text)
         if any(attachment.is_image for attachment in attachments):
             if self._contains_any(text, ("코드", "캡쳐", "캡처", "복사", "텍스트로", "옮겨줘")):
                 return IntentRoute(intent="image_code_transcription", reason="image_code_keyword")

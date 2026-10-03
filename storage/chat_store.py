@@ -22,6 +22,7 @@ class ChatMessage:
     role: str  # 'user' | 'assistant'
     content: str
     created_at: str
+    model_content: str | None = None
 
 
 @dataclass
@@ -103,11 +104,11 @@ def delete_session(session_id: int) -> None:
 
 # ── Messages ──────────────────────────────────────────────
 
-def add_message(session_id: int, role: str, content: str) -> ChatMessage:
+def add_message(session_id: int, role: str, content: str, model_content: str | None = None) -> ChatMessage:
     with get_connection() as conn:
         cur = conn.execute(
-            "INSERT INTO chat_messages (session_id, role, content) VALUES (?, ?, ?) RETURNING *",
-            (session_id, role, content),
+            "INSERT INTO chat_messages (session_id, role, content, model_content) VALUES (?, ?, ?, ?) RETURNING *",
+            (session_id, role, content, model_content),
         )
         msg = _row_to_message(cur.fetchone())
 
@@ -119,7 +120,7 @@ def get_messages(session_id: int) -> list[ChatMessage]:
     """세션의 전체 메시지 — LLM context 재구성용"""
     with get_connection() as conn:
         rows = conn.execute(
-            "SELECT * FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC",
+            "SELECT * FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC, id ASC",
             (session_id,),
         ).fetchall()
     return [_row_to_message(r) for r in rows]
@@ -156,7 +157,7 @@ def add_attachment(message_id: int, file_path: str, mime_type: str) -> ChatAttac
 def get_attachments(message_id: int) -> list[ChatAttachment]:
     with get_connection() as conn:
         rows = conn.execute(
-            "SELECT * FROM chat_attachments WHERE message_id = ? ORDER BY created_at ASC",
+            "SELECT * FROM chat_attachments WHERE message_id = ? ORDER BY created_at ASC, id ASC",
             (message_id,),
         ).fetchall()
     return [_row_to_attachment(r) for r in rows]
@@ -180,6 +181,7 @@ def _row_to_message(row: object) -> ChatMessage:
         session_id=row["session_id"],
         role=row["role"],
         content=row["content"],
+        model_content=row["model_content"],
         created_at=row["created_at"],
     )
 

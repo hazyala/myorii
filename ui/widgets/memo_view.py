@@ -69,6 +69,10 @@ class MarkdownHighlighter(QSyntaxHighlighter):
         self._hidden_marker = QTextCharFormat()
         self._hidden_marker.setForeground(QColor(0, 0, 0, 0))
         self._hidden_marker.setFontPointSize(1)
+        self._editing_marker = QTextCharFormat()
+        self._editing_marker.setForeground(QColor("#98a2b3"))
+        self._editing_marker.setFontPointSize(12)
+        self._active_block = -1
 
         self._code = QTextCharFormat()
         self._code.setForeground(QColor("#344054"))
@@ -96,13 +100,26 @@ class MarkdownHighlighter(QSyntaxHighlighter):
         self._quote.setForeground(QColor("#667085"))
         self._quote.setFontItalic(True)
 
+    def set_active_block(self, number: int) -> None:
+        if number == self._active_block:
+            return
+        old = self._active_block
+        self._active_block = number
+        for block_number in (old, number):
+            block = self.document().findBlockByNumber(block_number)
+            if block.isValid():
+                self.rehighlightBlock(block)
+
+    def _syntax_format(self) -> QTextCharFormat:
+        return self._editing_marker if self.currentBlock().blockNumber() == self._active_block else self._hidden_marker
+
     def highlightBlock(self, text: str) -> None:  # noqa: N802
         in_code = self.previousBlockState() == 1
         stripped = text.lstrip()
         indent = len(text) - len(stripped)
 
         if stripped.startswith("```"):
-            self.setFormat(indent, len(stripped), self._hidden_marker)
+            self.setFormat(indent, len(stripped), self._syntax_format())
             self.setCurrentBlockState(0 if in_code else 1)
             return
 
@@ -113,19 +130,19 @@ class MarkdownHighlighter(QSyntaxHighlighter):
 
         self.setCurrentBlockState(0)
 
-        heading_match = re.match(r"^(#{1,6})(\s*)(.*)$", stripped)
+        heading_match = re.match(r"^(#{1,6})(\s+)(.*)$", stripped)
         if heading_match:
             marker_len = len(heading_match.group(1)) + len(heading_match.group(2))
             level = min(6, len(heading_match.group(1)))
-            self.setFormat(indent, marker_len, self._hidden_marker)
+            self.setFormat(indent, marker_len, self._syntax_format())
             self.setFormat(indent + marker_len, len(text) - indent - marker_len, self._headings[level - 1])
         elif checkbox_match := re.match(r"^(?:-\s+)?\[[ xX]\]\s+", stripped):
-            self.setFormat(indent, len(checkbox_match.group(0)), self._hidden_marker)
+            self.setFormat(indent, len(checkbox_match.group(0)), self._syntax_format())
         elif re.match(r"^\d+\.\s+", stripped):
             marker_len = stripped.index(" ") + 1
             self.setFormat(indent, marker_len, self._marker)
         elif stripped.startswith(("- ", "* ", "+ ", '" ')):
-            marker_format = self._hidden_marker if stripped.startswith('" ') else self._marker
+            marker_format = self._syntax_format() if stripped.startswith('" ') else self._marker
             self.setFormat(indent, 2, marker_format)
             if stripped.startswith('" '):
                 self.setFormat(indent + 2, len(text) - indent - 2, self._quote)
@@ -140,9 +157,9 @@ class MarkdownHighlighter(QSyntaxHighlighter):
         for match in re.finditer(pattern, text):
             marker_left = match.start(1) - match.start()
             marker_right = match.end() - match.end(1)
-            self.setFormat(match.start(), marker_left, self._hidden_marker)
+            self.setFormat(match.start(), marker_left, self._syntax_format())
             self.setFormat(match.start(1), match.end(1) - match.start(1), fmt)
-            self.setFormat(match.end(1), marker_right, self._hidden_marker)
+            self.setFormat(match.end(1), marker_right, self._syntax_format())
 
     def _highlight_inline(self, text: str, pattern: str, fmt: QTextCharFormat, include_markers: bool) -> None:
         for match in re.finditer(pattern, text):
@@ -155,8 +172,10 @@ class MemoTextEdit(QTextEdit):
     def __init__(self) -> None:
         super().__init__()
         self._formatting_blocks = False
+        self._style_timer = QTimer(self)
+        self._style_timer.setSingleShot(True)
+        self._style_timer.timeout.connect(self._refresh_block_styles)
         self.textChanged.connect(self._queue_block_styles)
-        self.cursorPositionChanged.connect(self._queue_block_styles)
 
     def keyPressEvent(self, event) -> None:  # noqa: N802
         if (event.key() == Qt.Key.Key_Space or event.text() == " ") and self._expand_block_shortcut():
@@ -169,6 +188,9 @@ class MemoTextEdit(QTextEdit):
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and self._continue_list_block():
             return
         super().keyPressEvent(event)
+
+    def inputMethodEvent(self, event) -> None:  # noqa: N802
+        super().inputMethodEvent(event)
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.LeftButton and self._toggle_checkbox_at(event.position().toPoint()):
@@ -183,6 +205,16 @@ class MemoTextEdit(QTextEdit):
         block = cursor.block()
         offset = cursor.position() - block.position()
         prefix = block.text()[:offset]
+        fence = re.fullmatch(r"(\s*)```([\w+-]*)", prefix)
+        if fence and not self._is_cursor_inside_code_block():
+            cursor.beginEditBlock()
+            cursor.insertText("\n\n" + fence.group(1) + "```")
+            cursor.setPosition(block.position() + offset + 1)
+            cursor.endEditBlock()
+            self.setTextCursor(cursor)
+            self._queue_block_styles()
+            return True
+
         match = re.match(r'^(\s*)(#{1,3}|[-*+]|\[\]|\[ \]|1\.|"|“|”)$', prefix)
         if not match:
             return False
@@ -215,8 +247,13 @@ class MemoTextEdit(QTextEdit):
         if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
             cursor.insertText("\n")
         else:
-            cursor.movePosition(QTextCursor.MoveOperation.EndOfBlock)
-            cursor.insertText("\n```\n")
+            next_block = cursor.block().next()
+            if next_block.isValid() and next_block.text().lstrip().startswith("```"):
+                cursor.setPosition(next_block.position() + len(next_block.text()))
+                cursor.insertText("\n")
+            else:
+                cursor.movePosition(QTextCursor.MoveOperation.EndOfBlock)
+                cursor.insertText("\n```\n")
         self.setTextCursor(cursor)
         self._queue_block_styles()
         return True
@@ -259,7 +296,7 @@ class MemoTextEdit(QTextEdit):
     def _queue_block_styles(self) -> None:
         if self._formatting_blocks:
             return
-        self._refresh_block_styles()
+        self._style_timer.start(0)
 
     def _refresh_block_styles(self) -> None:
         if self._formatting_blocks:
@@ -267,9 +304,6 @@ class MemoTextEdit(QTextEdit):
 
         self._formatting_blocks = True
         signal_blocker = QSignalBlocker(self)
-        active_cursor = self.textCursor()
-        cursor_position = active_cursor.position()
-        anchor_position = active_cursor.anchor()
         in_code = False
         block = self.document().firstBlock()
         while block.isValid():
@@ -277,7 +311,8 @@ class MemoTextEdit(QTextEdit):
             block_format = self._default_block_format()
             if stripped.startswith("```"):
                 in_code = not in_code
-                block_format.setLineHeight(1, QTextBlockFormat.LineHeightTypes.FixedHeight.value)
+                if block.blockNumber() != self.textCursor().blockNumber():
+                    block_format.setLineHeight(1, QTextBlockFormat.LineHeightTypes.FixedHeight.value)
                 block_format.setTopMargin(0)
                 block_format.setBottomMargin(0)
             elif in_code:
@@ -302,13 +337,10 @@ class MemoTextEdit(QTextEdit):
                 block_format.setBottomMargin(5)
 
             block_cursor = QTextCursor(block)
-            block_cursor.setBlockFormat(block_format)
+            if block.blockFormat() != block_format:
+                block_cursor.setBlockFormat(block_format)
             block = block.next()
 
-        restored = self.textCursor()
-        restored.setPosition(anchor_position)
-        restored.setPosition(cursor_position, QTextCursor.MoveMode.KeepAnchor)
-        self.setTextCursor(restored)
         del signal_blocker
         self._formatting_blocks = False
 
@@ -713,9 +745,15 @@ class MemoEditor(QFrame):
         self._editor.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
         self._editor.textChanged.connect(self._schedule_save)
         self._highlighter = MarkdownHighlighter(self._editor.document())
+        self._editor.cursorPositionChanged.connect(self._update_active_syntax)
+        self._update_active_syntax()
 
         layout.addLayout(top_row)
         layout.addWidget(self._editor, 1)
+
+    def _update_active_syntax(self) -> None:
+        self._highlighter.set_active_block(self._editor.textCursor().blockNumber())
+        self._editor._queue_block_styles()
 
     def edit(self, memo: Memo) -> None:
         self._memo = memo
@@ -723,6 +761,7 @@ class MemoEditor(QFrame):
         self._editor.blockSignals(True)
         self._editor.setPlainText(memo.body)
         self._editor.blockSignals(False)
+        self._update_active_syntax()
         self._editor.refresh_block_styles()
         self._save_state.setText("저장됨")
         QTimer.singleShot(0, self._editor.setFocus)
