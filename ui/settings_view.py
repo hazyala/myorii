@@ -288,11 +288,10 @@ class SettingsView(QWidget):
     def _integration_section(self) -> QWidget:
         section = SettingsSection("연동", "link.png")
 
-        notion = SettingsRow("Notion 연동", "할일 목록을 Notion과 연동할 수 있어요.")
-        connect = localized_button("연동하기")
-        connect.setObjectName("secondaryButton")
-        notion.add_control(connect)
-        section.add_row(notion)
+        section.add_row(SettingsRow(
+            "MCP · 커넥터 · 플러그인",
+            "모델에 외부 도구와 서비스를 연결하는 기능은 향후 구현 예정입니다.",
+        ))
         return section
 
     def _info_section(self) -> QWidget:
@@ -304,16 +303,16 @@ class SettingsView(QWidget):
         version.add_control(version_value)
         section.add_row(version)
 
-        help_row = SettingsRow("도움말")
-        help_button = localized_button("도움말")
-        help_button.setObjectName("ghostActionButton")
-        help_row.add_control(help_button)
-        section.add_row(help_row)
-        feedback = SettingsRow("피드백 보내기")
-        feedback_button = localized_button("피드백")
-        feedback_button.setObjectName("ghostActionButton")
-        feedback.add_control(feedback_button)
-        section.add_row(feedback)
+        for title,notice in (("도움말", "도움말 사이트는 추후 구현 예정입니다."),
+                             ("문의 및 제안", "heamin0603@naver.com")):
+            row=SettingsRow(title)
+            caption=localized_label(notice)
+            caption.setObjectName("settingsRowCaption")
+            caption.setWordWrap(True)
+            caption.setMaximumWidth(220)
+            caption.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            row.add_control(caption)
+            section.add_row(row)
         return section
 
     def _exit_section(self) -> QWidget:
