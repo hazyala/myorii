@@ -134,6 +134,21 @@ class CodeTextBrowser(QTextBrowser):
             """
         )
 
+    def setMarkdown(self, markdown: str) -> None:  # noqa: N802
+        super().setMarkdown(markdown)
+        # Qt's default list indentation is too wide for the compact popover.
+        block = self.document().firstBlock()
+        seen = set()
+        while block.isValid():
+            text_list = block.textList()
+            if text_list is not None and text_list.objectIndex() not in seen:
+                seen.add(text_list.objectIndex())
+                fmt = text_list.format()
+                fmt.setIndent(max(1, fmt.indent()))
+                text_list.setFormat(fmt)
+            block = block.next()
+        self.document().setIndentWidth(18)
+
     def set_code_ranges(self, ranges: list[tuple[int, int, str]]) -> None:
         self._code_ranges = ranges
         self._highlighter.set_ranges([(start, end) for start, end, _text in ranges])
@@ -715,8 +730,7 @@ class MessageBubble(QWidget):
         return bullet_starts
 
     def _append_inline_segments(self, segments: list[tuple[str, str]], text: str) -> None:
-        if self._append_detected_code_list_segments(segments, text):
-            return
+        # Ordinary numbered/bulleted prose is Markdown, never inferred code.
 
         position = 0
         for match in re.finditer(r"`([^`\n]+)`", text):

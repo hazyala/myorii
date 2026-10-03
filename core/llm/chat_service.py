@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import replace
+from pathlib import Path
+import re
 
 from core.llm.attachments import AttachmentContext, AttachmentRouter
 from core.llm.contracts import ChatAttachmentPayload, ChatMessagePayload, ChatRequest
-from core.llm.ollama_client import ModelNotFound, OllamaClient, OllamaNotRunning
+from core.llm.ollama_client import ModelNotFound, OllamaClient, OllamaNotRunning, ContextLimitExceeded
 from core.llm.router import IntentRouter, ModelRouter, PromptProfileResolver, ResponseFormatter
 
 
@@ -51,8 +54,44 @@ class ChatService:
     def clear(self) -> None:
         self._messages.clear()
 
+    @property
+    def history(self) -> tuple[ChatMessagePayload, ...]:
+        return tuple(self._messages)
+
+    def restore_message(self, message: ChatMessagePayload, model_content: str | None = None) -> ChatMessagePayload:
+        available = tuple(a for a in message.attachments if Path(a.path).is_file())
+        missing = [a.name for a in message.attachments if a not in available]
+        restored = replace(message, attachments=available)
+        if model_content is not None:
+            restored = replace(restored, content=model_content)
+        elif available:
+            try:
+                restored = self._with_attachment_context(restored)
+            except (RuntimeError, ValueError, OSError):
+                restored = replace(restored, content=restored.content + "\n[이전 첨부 내용을 복원하지 못했습니다. 파일을 다시 첨부해주세요.]")
+        if missing:
+            restored = replace(restored, content=restored.content + "\n[이전 첨부 원본 없음: " + ", ".join(missing) + "]")
+        return restored
+
     def set_history(self, messages: list[ChatMessagePayload]) -> None:
         self._messages = list(messages)
+
+    def _request_history(self, intent: str, text: str, system_prompt: str) -> tuple[ChatMessagePayload, ...]:
+        # Independent naming/translation tasks must not inherit unrelated answers.
+        refers_back = bool(re.search(r"이전|앞서|방금|위의|그걸|그거|그것|같은|다시|더 |이걸|이거|이것|앞의|위 내용|위 문장|previous|above|that|same|again", text, re.I))
+        if (intent.startswith("naming_") or intent == "translate") and not refers_back:
+            return ()
+        budget = max(0, 12000 - len(system_prompt) - len(text))
+        selected: list[ChatMessagePayload] = []
+        # Keep complete recent exchanges; never start history with an orphan assistant.
+        for index in range(len(self._messages) - 2, -1, -2):
+            pair = self._messages[index:index + 2]
+            cost = sum(len(m.content) + 64 + (2000 if any(a.is_image for a in m.attachments) else 0) for m in pair)
+            if len(selected) >= 12 or cost > budget:
+                break
+            selected[0:0] = pair
+            budget -= cost
+        return tuple(selected)
 
     def send(
         self,
@@ -72,7 +111,16 @@ class ChatService:
         )
 
         route = self._intent_router.route(request)
+        # Follow-up attachment questions retain the attachment profile, even when
+        # a negated word such as "수정 코드는 필요 없어" triggers a code rule.
+        if not attachments and re.search(r"첨부|방금|이전|그 파일|그 이미지|위 문서", text):
+            previous = next((m for m in reversed(request.history) if m.role == "user" and m.attachments), None)
+            if previous is not None and route.intent in {"simple_chat", "code_explain", "code_fix"}:
+                route = self._intent_router.route(replace(request, user_message=replace(user_message, attachments=previous.attachments)))
         system_prompt = self._prompt_profile_resolver.resolve(route.intent)
+        if len(system_prompt) + len(user_message.content) > 12000:
+            raise ContextLimitExceeded("입력 내용이 너무 길어요. 내용을 나누어 보내주세요.")
+        request = replace(request, history=self._request_history(route.intent, text, system_prompt))
         models = self._list_models_cached()
         model_route = self._model_router.route(request, route.intent, tuple(models))
         if model_route.model not in models:

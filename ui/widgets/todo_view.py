@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from PyQt6.QtCore import QEvent, QPoint, QRect, QSize, Qt, QTimer
 from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import (
@@ -168,18 +170,22 @@ class TodoItem(QFrame):
         layout.addWidget(self._handle, 0, Qt.AlignmentFlag.AlignTop)
         layout.addWidget(self._checkbox, 0, Qt.AlignmentFlag.AlignTop)
         layout.addWidget(self._label, 1)
+        self._delete_button = QPushButton("×")
+        self._delete_button.setObjectName("memoDeleteButton")
+        self._delete_button.setFixedSize(28, 28)
+        self._delete_button.setToolTip("할 일 삭제")
+        self._delete_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._delete_button.clicked.connect(lambda: self._parent_view.remove_item(self))
+        layout.addWidget(self._delete_button, 0, Qt.AlignmentFlag.AlignTop)
 
     def _on_checked(self, checked: bool) -> None:
-        todo_store.toggle(self._todo.id)
+        updated = todo_store.toggle(self._todo.id)
+        if updated is not None:
+            self._todo = updated
         if checked:
             self._apply_done_style()
-            QTimer.singleShot(80, self._remove_if_done)
         else:
             self._apply_undone_style()
-
-    def _remove_if_done(self) -> None:
-        if self._checkbox.isChecked():
-            self._parent_view.remove_item(self)
 
     def _apply_done_style(self) -> None:
         self._label.setStyleSheet("color: #b0b8c8; text-decoration: line-through;")
@@ -223,7 +229,7 @@ class TodoItem(QFrame):
 
     def set_card_width(self, width: int) -> None:
         width = max(160, width)
-        label_width = max(80, width - self.CHROME_WIDTH)
+        label_width = max(80, width - self.CHROME_WIDTH - 36)
         bounds = self._label.fontMetrics().boundingRect(
             QRect(0, 0, label_width, 1000),
             int(Qt.TextFlag.TextWordWrap),
@@ -264,6 +270,7 @@ class TodoView(QWidget):
         self.setObjectName("todoView")
         self._items: list[TodoItem] = []
         self._drag_item: TodoItem | None = None
+        self._date_headers: list[QWidget] = []
         self._setup_ui()
         self._load_todos()
 
@@ -391,10 +398,12 @@ class TodoView(QWidget):
         self.hide_add_input()
 
     def remove_item(self, item: TodoItem) -> None:
+        todo_store.delete(item.todo_id)
         if item in self._items:
             self._items.remove(item)
         self._list_layout.removeWidget(item)
         item.deleteLater()
+        self._rebuild_groups()
         self.sync_item_sizes()
 
     def begin_drag(self, item: TodoItem, global_pos: QPoint) -> None:
@@ -407,13 +416,12 @@ class TodoView(QWidget):
 
         old_index = self._items.index(self._drag_item)
         new_index = self._index_for_global_y(global_pos)
-        if new_index == old_index:
+        if new_index == old_index or self._todo_date(self._items[new_index]) != self._todo_date(self._drag_item):
             return
 
         self._items.pop(old_index)
         self._items.insert(new_index, self._drag_item)
-        self._list_layout.removeWidget(self._drag_item)
-        self._list_layout.insertWidget(new_index, self._drag_item, 0, Qt.AlignmentFlag.AlignTop)
+        self._rebuild_groups()
         self.sync_item_sizes()
 
     def end_drag(self) -> None:
@@ -438,14 +446,50 @@ class TodoView(QWidget):
 
     def _load_todos(self) -> None:
         for todo in todo_store.get_all():
-            if not todo.done:
-                self._insert_item(todo)
+            self._insert_item(todo)
 
     def _insert_item(self, todo: Todo) -> None:
         item = TodoItem(todo, self)
         self._items.append(item)
-        self._list_layout.insertWidget(len(self._items) - 1, item, 0, Qt.AlignmentFlag.AlignTop)
+        self._rebuild_groups()
         QTimer.singleShot(0, self.sync_item_sizes)
+
+    @staticmethod
+    def _todo_date(item: TodoItem) -> str:
+        timestamp = datetime.fromisoformat(item._todo.created_at.replace("Z", "+00:00"))
+        return timestamp.astimezone().date().isoformat()
+
+    def _rebuild_groups(self) -> None:
+        for item in self._items:
+            self._list_layout.removeWidget(item)
+        for header in self._date_headers:
+            self._list_layout.removeWidget(header)
+            header.deleteLater()
+        self._date_headers.clear()
+        # Stable sorting retains the user's ordering within each date.
+        self._items.sort(key=self._todo_date, reverse=True)
+        previous_date = None
+        index = 0
+        for item in self._items:
+            day = self._todo_date(item)
+            if day != previous_date:
+                header = QWidget()
+                header.setObjectName("todoDateGroup")
+                layout = QHBoxLayout(header)
+                layout.setContentsMargins(0, 6, 0, 3)
+                label = QLabel(datetime.fromisoformat(day).strftime("%Y.%m.%d"))
+                label.setStyleSheet("color: #87909e; font-size: 11px; background: transparent;")
+                line = QFrame()
+                line.setFixedHeight(1)
+                line.setStyleSheet("background: rgba(150, 160, 175, 65); border: none;")
+                layout.addWidget(label)
+                layout.addWidget(line, 1)
+                self._date_headers.append(header)
+                self._list_layout.insertWidget(index, header)
+                index += 1
+                previous_date = day
+            self._list_layout.insertWidget(index, item, 0, Qt.AlignmentFlag.AlignTop)
+            index += 1
 
     def _commit_input(self) -> None:
         text = self._input.text().strip()
