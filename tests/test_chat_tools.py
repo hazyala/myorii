@@ -1,6 +1,7 @@
 import os
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 import json
+from datetime import date, datetime, time, timedelta, timezone
 import tempfile
 import unittest
 from pathlib import Path
@@ -102,6 +103,119 @@ class ChatToolTests(unittest.TestCase):
         todo_store.toggle(todo_store.get_all()[0].id)
         self.assertIn('없습니다', ''.join(service.send('/todo 오늘 뭐 해야 하지?')))
         self.assertEqual(len(client.requests), 2)
+
+    def test_yesterday_pending_uses_local_creation_date(self):
+        yesterday = date.today() - timedelta(days=1)
+        old = todo_store.add('어제 남은 일')
+        done = todo_store.add('어제 완료한 일')
+        todo_store.toggle(done.id)
+        today_item = todo_store.add('오늘 추가한 일')
+        two_days = todo_store.add('그제 추가한 일')
+        local_zone = datetime.now().astimezone().tzinfo
+        with database.get_connection() as conn:
+            for item, day in ((old, yesterday), (done, yesterday), (today_item, date.today()), (two_days, yesterday-timedelta(days=1))):
+                # A local midnight may be the previous date in UTC (e.g. Seoul).
+                timestamp = datetime.combine(day, time(0, 30), local_zone).astimezone(timezone.utc).isoformat()
+                conn.execute('UPDATE todos SET created_at=? WHERE id=?', (timestamp, item.id))
+        service, client = self.service(plan('list'))
+        answer = ''.join(service.send('어제 할일중에 아직 못한거 남았나?'))
+        self.assertIn('어제 남은 일', answer)
+        for excluded in ('어제 완료한 일', '오늘 추가한 일', '그제 추가한 일'):
+            self.assertNotIn(excluded, answer)
+        self.assertIn(yesterday.isoformat(), answer)
+        self.assertEqual(len(client.requests), 1)
+        todo_store.toggle(old.id)
+        service, _ = self.service(plan('list'))
+        self.assertIn('없습니다', ''.join(service.send('/todo 어제 할일중에 아직 못한거 남았나?')))
+
+    def test_date_range_and_invalid_dates(self):
+        todo = todo_store.add('지난달 보고서')
+        with database.get_connection() as conn:
+            conn.execute("UPDATE todos SET created_at='2026-09-15T12:00:00Z' WHERE id=?", (todo.id,))
+        service, _ = self.service(plan('list', date_from='2026-09-01', date_to='2026-09-30'))
+        self.assertIn('지난달 보고서', ''.join(service.send('/todo 9월에 추가한 미완료 할일 알려줘')))
+        for bounds in ({'date_from': '2026-02-30'}, {'date_from': 'yesterday'}, {'date_from': 123},
+                       {'date_from': '2026-09-30', 'date_to': '2026-09-01'}):
+            service, _ = self.service(plan('list', **bounds))
+            with self.assertRaises(ToolPlanError):
+                list(service.send('/todo 해당 기간에 추가한 일 조회해줘'))
+
+    def test_conversation_summary_uses_both_sides_and_all_turns(self):
+        service, client = self.service(plan('add', 'memo', source='conversation', content='잘못된 계획 내용'),
+                                       {'title': '부산 출장 계획', 'content': '부산 출장을 정하고 회의 시간을 오후 3시로 확정했다.'})
+        service.set_history([
+            ChatMessagePayload('user', '부산 출장을 가기로 했어'),
+            ChatMessagePayload('assistant', '회의 시간을 정해주세요.'),
+            ChatMessagePayload('user', '회의는 오후 3시로 하자'),
+            ChatMessagePayload('assistant', '오후 3시로 정했습니다.'),
+        ])
+        list(service.send('/memo 지금 우리가 대화 한 내용 요약해서 적어줘'))
+        summary_request = json.loads(client.requests[-1][1][-1].content)
+        self.assertEqual([m['role'] for m in summary_request['conversation']], ['user', 'assistant', 'user', 'assistant'])
+        self.assertIn('부산 출장을 가기로 했어', str(summary_request))
+        self.assertEqual(memo_store.get_all()[0].body, '부산 출장을 정하고 회의 시간을 오후 3시로 확정했다.')
+        self.assertNotIn('잘못된', memo_store.get_all()[0].body)
+        self.assertEqual(memo_store.get_all()[0].title, '부산 출장 계획')
+
+    def test_conversation_empty_and_save_confirmations(self):
+        service, _ = self.service(plan('add', 'memo', source='conversation', content='invented'))
+        self.assertIn('찾지 못했습니다', ''.join(service.send('/memo 지금 대화 내용 요약해서 적어줘')))
+        self.assertEqual(memo_store.get_all(), [])
+        service, _ = self.service(plan('add', 'memo', source='conversation', content='invented'))
+        service.set_history([ChatMessagePayload('user', '/memo 테스트 저장해줘'),
+                             ChatMessagePayload('assistant', '메모에 저장했습니다. 테스트')])
+        self.assertIn('찾지 못했습니다', ''.join(service.send('/memo 지금 대화 내용 요약해서 적어줘')))
+        self.assertEqual(memo_store.get_all(), [])
+
+    def test_long_conversation_summary_covers_oldest_and_latest(self):
+        service, client = self.service(plan('add', 'memo', source='conversation'),
+                                       {'content': '첫 계획: 부산 출장을 간다.'},
+                                       {'content': '마지막 계획: 회의는 오후 3시다.'},
+                                       {'content': '부산 출장, 회의 오후 3시.'})
+        service.set_history([ChatMessagePayload('user', '부산 출장 ' + '가' * 4000),
+                             ChatMessagePayload('assistant', '확인 ' + '나' * 4000),
+                             ChatMessagePayload('user', '마지막 회의는 오후 3시'),
+                             ChatMessagePayload('assistant', '3시 확인')])
+        list(service.send('지금 우리가 대화 한 내용 요약해서 적어줘'))
+        requests = [json.loads(messages[-1].content) for _, messages in client.requests[1:]]
+        chunks = [str(request['conversation']) for request in requests[:-1]]
+        self.assertIn('부산 출장', ''.join(chunks))
+        self.assertIn('마지막 회의는 오후 3시', ''.join(chunks))
+        self.assertTrue(all(sum(len(m.content) for m in messages) <= 12000 for _, messages in client.requests))
+        self.assertEqual(memo_store.get_all()[0].body, '부산 출장, 회의 오후 3시.')
+
+    def test_summary_relative_date_is_corrected_before_save(self):
+        service, client = self.service(plan('add', 'memo', source='conversation'),
+                                       {'content': '이번 주 부산 출장'}, {'content': '다음 주 부산 출장'})
+        service.set_history([ChatMessagePayload('user', '다음 주 부산 출장'), ChatMessagePayload('assistant', '확인')])
+        list(service.send('/memo 지금 대화 내용 요약해서 적어줘'))
+        self.assertEqual(memo_store.get_all()[0].body, '다음 주 부산 출장')
+        self.assertIn('correction', client.requests[-1][1][-1].content)
+
+    def test_summary_relative_date_failure_does_not_save(self):
+        service, _ = self.service(plan('add', 'memo', source='conversation'),
+                                  {'content': '이번 주 부산 출장'}, {'content': '내일 부산 출장'})
+        service.set_history([ChatMessagePayload('user', '다음 주 부산 출장'), ChatMessagePayload('assistant', '확인')])
+        with self.assertRaises(ToolPlanError): list(service.send('/memo 지금 대화 내용 요약해서 적어줘'))
+        self.assertEqual(memo_store.get_all(), [])
+
+    def test_cloud_date_lookup_and_conversation_summary(self):
+        yesterday = date.today() - timedelta(days=1)
+        todo = todo_store.add('어제 보고서')
+        local_zone = datetime.now().astimezone().tzinfo
+        timestamp = datetime.combine(yesterday, time(12), local_zone).isoformat()
+        with database.get_connection() as conn:
+            conn.execute('UPDATE todos SET created_at=? WHERE id=?', (timestamp, todo.id))
+        for provider in ('openai', 'gemini', 'anthropic'):
+            client = ScriptClient(plan('list'), plan('add', 'memo', source='conversation'), {'content': '회의 3시'})
+            service = ChatService()
+            service.set_backend(provider, 'selected-model')
+            with patch('core.llm.cloud_client.CloudClient', return_value=client):
+                self.assertIn('어제 보고서', ''.join(service.send('어제 할일중에 아직 못한거 남았나?')))
+                service.set_history([ChatMessagePayload('user', '회의 3시'), ChatMessagePayload('assistant', '확인')])
+                list(service.send('/memo 지금 우리가 대화 한 내용 요약해서 적어줘'))
+            self.assertTrue(all(model == 'selected-model' for model, _ in client.requests))
+        self.assertEqual([memo.body for memo in memo_store.get_all()], ['회의 3시'] * 3)
 
     def test_semantic_search_and_titles(self):
         memo = memo_store.add('출장 일정', '부산 회의는 오후 3시')

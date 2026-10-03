@@ -77,7 +77,7 @@ class ChatTagTests(unittest.TestCase):
                 yield '일반 질문 답변'
 
         editor = ChatInput()
-        for text in ('폴더명 /memo괜찮아?', '/todo', '/memo\t괜찮아?', '/memo\n괜찮아?', 'https://example.com/memo 이름 괜찮아?'):
+        for text in ('폴더명 /memo괜찮아?', '/MEMO?', '/todo', '/memo\t괜찮아?', '/memo\n괜찮아?', 'https://example.com/memo 이름 괜찮아?'):
             with self.subTest(text=text):
                 self.assertFalse(is_tool_request(text))
                 editor.setPlainText(text)
