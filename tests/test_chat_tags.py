@@ -11,6 +11,8 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtTest import QTest
 from PyQt6.QtCore import Qt
 from ui.widgets.chat_view import ChatInput
+from core.llm.chat_service import ChatService, DEFAULT_MODEL
+from core.tools.chat_tools import is_tool_request
 
 app = QApplication.instance() or QApplication([])
 
@@ -64,3 +66,32 @@ class ChatTagTests(unittest.TestCase):
             self.assertEqual(len(todos._date_headers), 0)
             todos.close()
             memos.close()
+
+    def test_unspaced_tags_are_plain_text_in_ui_and_service(self):
+        class OrdinaryClient:
+            def list_models(self):
+                return [DEFAULT_MODEL]
+
+            def stream_chat(self, model, messages):
+                self.messages = messages
+                yield '일반 질문 답변'
+
+        editor = ChatInput()
+        for text in ('폴더명 /memo괜찮아?', '/todo', '/memo\t괜찮아?', '/memo\n괜찮아?', 'https://example.com/memo 이름 괜찮아?'):
+            with self.subTest(text=text):
+                self.assertFalse(is_tool_request(text))
+                editor.setPlainText(text)
+                app.processEvents()
+                block = editor.document().firstBlock()
+                while block.isValid():
+                    self.assertFalse(block.layout().formats())
+                    block = block.next()
+                client = OrdinaryClient()
+                service = ChatService(client=client)
+                self.assertEqual(''.join(service.send(text)), '일반 질문 답변')
+                self.assertEqual(client.messages[-1].content, text)
+                self.assertNotIn('current_request', client.messages[-1].content)
+        self.assertTrue(is_tool_request('/memo 괜찮아?'))
+        # A separate natural command still works; an unspaced slash name can
+        # remain part of the data being saved.
+        self.assertTrue(is_tool_request('메모에 폴더명 /todo를 저장해줘'))

@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from mimetypes import guess_type
 from pathlib import Path
-import re
 
 from PyQt6.QtCore import QEasingCurve, QEvent, QMimeData, QPoint, QPropertyAnimation, QSize, QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import (
@@ -46,6 +45,7 @@ from PyQt6.QtWidgets import (
 import storage.chat_store as chat_store
 from core.llm.chat_service import ChatService
 from core.llm.contracts import ChatAttachmentPayload, ChatMessagePayload
+from core.tools.chat_tools import TAG_PATTERN
 from ui.assets import asset_path
 from ui.chat_worker import ChatWorker
 from ui.widgets.message_bubble import MessageAttachment, MessageBubble
@@ -524,7 +524,7 @@ class ToolTagHighlighter(QSyntaxHighlighter):
     """Highlight complete, space-terminated tags without modifying undo or IME."""
 
     def highlightBlock(self, text: str) -> None:  # noqa: N802
-        for match in re.finditer(r"(?<!\S)/(todo|memo)(?= )", text):
+        for match in TAG_PATTERN.finditer(text):
             fmt = QTextCharFormat()
             fmt.setForeground(color("#2f80ff" if match.group(1) == "todo" else "#9862d9"))
             fmt.setFontWeight(700)

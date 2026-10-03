@@ -27,8 +27,13 @@ def tool_target(text: str) -> str | None:
 
 
 def is_tool_request(text: str) -> bool:
-    return bool(tool_target(text) or re.search(
-        r"할\s*일|메모|오늘.*(?:해야|할까|할 일)|\b(?:todo|memo)\b", text, re.I
+    if tool_target(text):
+        return True
+    # Slash tokens without an immediately following ASCII space are ordinary
+    # text, including folder names and URLs. They must not trigger natural routing.
+    natural_text = re.sub(r"\S*/(?:todo|memo)\S*", "", text)
+    return bool(re.search(
+        r"할\s*일|메모|오늘.*(?:해야|할까|할 일)|\b(?:todo|memo)\b", natural_text, re.I
     ))
 
 
