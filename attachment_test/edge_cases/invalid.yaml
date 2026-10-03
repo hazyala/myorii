@@ -1,0 +1,5 @@
+title: 잘못된 YAML
+items:
+  - id: 1
+   name: 들여쓰기오류
+  price 1000
