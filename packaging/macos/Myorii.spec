@@ -32,7 +32,7 @@ a = Analysis(
             "stdlib",
         ),
     ],
-    hiddenimports=["pypdf", "pdfminer.high_level"],
+    hiddenimports=["pypdf", "pdfminer.high_level", "keyring.backends.macOS"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
