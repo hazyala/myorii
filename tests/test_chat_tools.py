@@ -130,13 +130,18 @@ class ChatToolTests(unittest.TestCase):
 
     def test_cloud_providers_use_same_tools(self):
         for provider in ('openai', 'gemini', 'anthropic'):
-            client = ScriptClient(plan('add', content=provider), plan('list'), plan('search', 'memo'))
+            client = ScriptClient(plan('add', content=provider), plan('list'),
+                                  plan('add', 'memo', content='부산 회의 3시', title='회의'),
+                                  plan('search', 'memo', query='부산'),
+                                  {'ids': [('openai', 'gemini', 'anthropic').index(provider) + 1]}, '3시입니다.')
             service = ChatService()
             service.set_backend(provider, 'selected-model')
             with patch('core.llm.cloud_client.CloudClient', return_value=client):
                 list(service.send('/todo ' + provider + ' 추가해줘'))
                 self.assertIn(provider, ''.join(service.send('/todo 오늘 뭐 해야 하지?')))
-                self.assertIn('찾지 못했습니다', ''.join(service.send('/memo 일정 찾아줘')))
+                list(service.send('/memo 부산 회의 3시 추가해줘'))
+                self.assertIn('참고한 메모: 회의', ''.join(service.send('/memo 부산 일정 찾아줘')))
+                memo_store.delete(('openai', 'gemini', 'anthropic').index(provider) + 1)
             self.assertTrue(all(model == 'selected-model' for model, _ in client.requests))
 
     def test_non_tool_request_and_none(self):

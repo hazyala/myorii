@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from mimetypes import guess_type
 from pathlib import Path
+import re
 
 from PyQt6.QtCore import QEasingCurve, QEvent, QMimeData, QPoint, QPropertyAnimation, QSize, QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import (
@@ -24,6 +25,8 @@ from PyQt6.QtGui import (
     QPen,
     QPixmap,
     QTextOption,
+    QSyntaxHighlighter,
+    QTextCharFormat,
 )
 from PyQt6.QtWidgets import (
     QFileDialog,
@@ -517,6 +520,17 @@ class ChatHistoryView(QWidget):
         return max(0, len(self._items) - 1)
 
 
+class ToolTagHighlighter(QSyntaxHighlighter):
+    """Highlight complete, space-terminated tags without modifying undo or IME."""
+
+    def highlightBlock(self, text: str) -> None:  # noqa: N802
+        for match in re.finditer(r"(?<!\S)/(todo|memo)(?= )", text):
+            fmt = QTextCharFormat()
+            fmt.setForeground(color("#2f80ff" if match.group(1) == "todo" else "#9862d9"))
+            fmt.setFontWeight(700)
+            self.setFormat(match.start(), len(match.group()), fmt)
+
+
 class ChatInput(QTextEdit):
     send_requested = pyqtSignal(str)
     files_dropped = pyqtSignal(list)
@@ -526,6 +540,8 @@ class ChatInput(QTextEdit):
         self.setObjectName("promptInput")
         set_localized_placeholder(self, "무엇을 도와줄까?")
         self.setAcceptRichText(False)
+        self._tag_highlighter = ToolTagHighlighter(self.document())
+        self.setToolTip("/todo + 스페이스: 할일 · /memo + 스페이스: 메모")
         self.setAcceptDrops(True)
         self.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
         self.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)

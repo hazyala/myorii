@@ -880,6 +880,7 @@ class MemoView(QWidget):
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
+        self.refresh_list()
         QTimer.singleShot(0, self.sync_item_sizes)
 
     def create_memo(self) -> None:

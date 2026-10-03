@@ -215,6 +215,7 @@ class MainWindow(QMainWindow):
         highlighter.refresh_palette()
         highlighter.set_active_block(self._memo_view._editor._editor.textCursor().blockNumber())
         highlighter.rehighlight()
+        self._chat_view._prompt._tag_highlighter.rehighlight()
         self._memo_view._editor._editor.refresh_block_styles()
         for button in self._tabs_group.buttons():
             button._refresh_icon()
