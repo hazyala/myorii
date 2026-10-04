@@ -776,6 +776,9 @@ class MemoEditor(QFrame):
         if self._memo is None:
             return
         body = self._editor.toPlainText()
+        self._save_timer.stop()
+        if body == self._memo.body:
+            return
         title = next(
             (
                 preview_line(line)
@@ -784,9 +787,12 @@ class MemoEditor(QFrame):
             ),
             "",
         )
-        updated = memo_store.update(self._memo.id, title[:80], body)
+        updated = memo_store.update_if_unchanged(self._memo, title[:80], body)
         if updated is not None:
             self._memo = updated
+        else:
+            self._save_state.setText("다른 곳에서 변경되어 저장하지 못했습니다. 작성 내용은 복사할 수 있습니다.")
+            return
         set_localized_text(self._save_state, "저장됨")
         self._parent_view.refresh_list()
 
@@ -880,6 +886,7 @@ class MemoView(QWidget):
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
+        self.refresh_list()
         QTimer.singleShot(0, self.sync_item_sizes)
 
     def create_memo(self) -> None:
@@ -903,6 +910,20 @@ class MemoView(QWidget):
         for memo in memos:
             self._insert_item(memo)
         set_localized_text(self._count_label, "내 메모 {count}", count=len(memos))
+
+    def refresh_after_chat_mutation(self) -> None:
+        self.refresh_list()
+        snapshot = self._editor._memo
+        if snapshot is None:
+            return
+        current = memo_store.get(snapshot.id)
+        if current is None:
+            self._editor._save_timer.stop()
+            self._editor._memo = None
+            self._editor.hide()
+            self._list_page.show()
+        elif self._editor._editor.toPlainText() == snapshot.body:
+            self._editor.edit(current)
 
     def delete_memo(self, item: MemoCard) -> None:
         memo_store.delete(item.memo_id)

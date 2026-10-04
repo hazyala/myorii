@@ -98,6 +98,25 @@ def delete(todo_id: int) -> None:
         conn.execute("DELETE FROM todos WHERE id = ?", (todo_id,))
 
 
+def update_if_unchanged(snapshot: Todo, text: str) -> Optional[Todo]:
+    with get_connection() as conn:
+        row = conn.execute(
+            """UPDATE todos SET text=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            WHERE id=? AND text=? AND done=? AND updated_at=? RETURNING *""",
+            (text, snapshot.id, snapshot.text, int(snapshot.done), snapshot.updated_at),
+        ).fetchone()
+    return _row_to_todo(row) if row else None
+
+
+def delete_if_unchanged(snapshot: Todo) -> bool:
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "DELETE FROM todos WHERE id=? AND text=? AND done=? AND updated_at=?",
+            (snapshot.id, snapshot.text, int(snapshot.done), snapshot.updated_at),
+        )
+        return cursor.rowcount == 1
+
+
 def _row_to_todo(row: object) -> Todo:
     return Todo(
         id=row["id"],

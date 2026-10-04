@@ -24,6 +24,8 @@ from PyQt6.QtGui import (
     QPen,
     QPixmap,
     QTextOption,
+    QSyntaxHighlighter,
+    QTextCharFormat,
 )
 from PyQt6.QtWidgets import (
     QFileDialog,
@@ -43,6 +45,7 @@ from PyQt6.QtWidgets import (
 import storage.chat_store as chat_store
 from core.llm.chat_service import ChatService
 from core.llm.contracts import ChatAttachmentPayload, ChatMessagePayload
+from core.tools.chat_tools import TAG_PATTERN
 from ui.assets import asset_path
 from ui.chat_worker import ChatWorker
 from ui.widgets.message_bubble import MessageAttachment, MessageBubble
@@ -517,6 +520,17 @@ class ChatHistoryView(QWidget):
         return max(0, len(self._items) - 1)
 
 
+class ToolTagHighlighter(QSyntaxHighlighter):
+    """Highlight complete, space-terminated tags without modifying undo or IME."""
+
+    def highlightBlock(self, text: str) -> None:  # noqa: N802
+        for match in TAG_PATTERN.finditer(text):
+            fmt = QTextCharFormat()
+            fmt.setForeground(color("#2f80ff" if match.group(1) == "todo" else "#9862d9"))
+            fmt.setFontWeight(700)
+            self.setFormat(match.start(), len(match.group()), fmt)
+
+
 class ChatInput(QTextEdit):
     send_requested = pyqtSignal(str)
     files_dropped = pyqtSignal(list)
@@ -526,6 +540,8 @@ class ChatInput(QTextEdit):
         self.setObjectName("promptInput")
         set_localized_placeholder(self, "무엇을 도와줄까?")
         self.setAcceptRichText(False)
+        self._tag_highlighter = ToolTagHighlighter(self.document())
+        self.setToolTip("/todo + 스페이스: 할일 · /memo + 스페이스: 메모")
         self.setAcceptDrops(True)
         self.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
         self.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
@@ -619,6 +635,8 @@ class ChatInput(QTextEdit):
 
 
 class ChatView(QWidget):
+    memo_requested = pyqtSignal(int)
+    storage_changed = pyqtSignal()
     def __init__(self, chat_service: ChatService | None = None) -> None:
         super().__init__()
         self.setObjectName("chatView")
@@ -830,6 +848,7 @@ class ChatView(QWidget):
         bubble = MessageBubble(role, text, attachments)
         bubble.update_available_width(self._available_message_width())
         bubble.code_copied.connect(self._show_copy_toast)
+        bubble.memo_requested.connect(self.memo_requested.emit)
         insert_index = max(0, self._message_layout.count() - 1)
         self._message_layout.insertWidget(insert_index, bubble)
         self._register_pointer_autoscroll_widget(bubble)
@@ -857,6 +876,9 @@ class ChatView(QWidget):
             self._assistant_bubble.render_markdown()
             self._register_pointer_autoscroll_widget(self._assistant_bubble)
         self._record_exchange(final_text)
+        if self._chat_service.history and self._chat_service.history[-1].metadata.get("intent") in {
+                "todo_add", "memo_add", "todo_update", "memo_update", "todo_delete", "memo_delete"}:
+            self.storage_changed.emit()
         self._assistant_bubble = None
         self._assistant_has_content = False
         self._set_input_enabled(True)

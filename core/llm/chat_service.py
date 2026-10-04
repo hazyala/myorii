@@ -9,6 +9,7 @@ from core.llm.attachments import AttachmentContext, AttachmentRouter
 from core.llm.contracts import ChatAttachmentPayload, ChatMessagePayload, ChatRequest
 from core.llm.ollama_client import ModelNotFound, OllamaClient, OllamaNotRunning, ContextLimitExceeded
 from core.llm.router import IntentRouter, ModelRouter, PromptProfileResolver, ResponseFormatter
+from core.tools.chat_tools import ChatTools, is_tool_request
 
 
 DEFAULT_MODEL = "qwen3-vl:4b-instruct"
@@ -114,6 +115,22 @@ class ChatService:
         text = user_text.strip()
         if not text and not attachments:
             return
+        if len(text) > 12000:
+            raise ContextLimitExceeded("입력 내용이 너무 길어요. 내용을 나누어 보내주세요.")
+
+        if is_tool_request(text):
+            model = self._model
+            complete = lambda messages: self._complete_tool(messages, provider, model)
+            result = ChatTools(complete).execute(text, self.history)
+            if result is not None:
+                answer, intent = result
+                self._messages.extend([
+                    ChatMessagePayload(role="user", content=text),
+                    ChatMessagePayload(role="assistant", content=answer,
+                                       metadata={"intent": intent, "model": model}),
+                ])
+                yield answer
+                return
 
         user_message = ChatMessagePayload(role="user", content=text, attachments=attachments)
         user_message = self._with_attachment_context(user_message)
@@ -245,3 +262,11 @@ class ChatService:
 
         self._model_cache = self._client.list_models()
         return self._model_cache
+
+    def _complete_tool(self, messages: list[ChatMessagePayload], provider: str, model: str) -> str:
+        if provider == "ollama":
+            if model not in self._list_models_cached():
+                raise ModelNotFound(f"모델이 설치돼 있지 않아요: {model}")
+            return "".join(self._client.stream_chat(model, messages))
+        from core.llm.cloud_client import CloudClient
+        return "".join(CloudClient(provider).stream_chat(model, messages))

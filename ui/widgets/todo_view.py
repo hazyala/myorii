@@ -394,7 +394,17 @@ class TodoView(QWidget):
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
+        self.refresh_list()
         QTimer.singleShot(0, self.sync_item_sizes)
+
+    def refresh_list(self) -> None:
+        for item in self._items:
+            self._list_layout.removeWidget(item)
+            item.deleteLater()
+        self._items.clear()
+        for todo in todo_store.get_all():
+            self._items.append(TodoItem(todo, self))
+        self._rebuild_groups()
 
     def show_add_input(self) -> None:
         self._add_btn.hide()
