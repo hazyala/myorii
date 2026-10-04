@@ -1,0 +1,38 @@
+[
+  {
+    "request": "/memo 부산 회의 시간 언제야?",
+    "answer": "부산 회의 시간은 오후 3시입니다.\n\n참고한 메모: [부산 출장](myorii://memo/1)"
+  },
+  {
+    "request": "/memo 부산 출장 메모에서 회의 시간을 오후 4시로 수정해줘",
+    "answer": "메모를 수정했습니다.\n\n[부산 출장](myorii://memo/1)"
+  },
+  {
+    "request": "/memo 부산 출장 메모 제목만 출장 일정으로 바꿔줘",
+    "answer": "메모를 수정했습니다.\n\n[출장 일정](myorii://memo/1)"
+  },
+  {
+    "request": "/memo 출장 일정 본문에서 준비물 문장을 지워줘",
+    "answer": "메모를 수정했습니다.\n\n[출장 일정](myorii://memo/1)"
+  },
+  {
+    "request": "/todo 우유 사기를 두유 사기로 수정해줘",
+    "answer": "할일을 수정했습니다.\n\n두유 사기"
+  },
+  {
+    "request": "/todo 두유 사기 삭제해줘",
+    "answer": "할일을 삭제했습니다.\n\n두유 사기"
+  },
+  {
+    "request": "/memo 출장 일정 삭제해줘",
+    "answer": "메모를 삭제했습니다.\n\n출장 일정"
+  },
+  {
+    "request": "/memo 출장 일정 삭제해줘",
+    "answer": "수정·삭제할 항목을 찾지 못했습니다."
+  },
+  {
+    "request": "/memo 회의 삭제해줘",
+    "answer": "여러 항목이 해당합니다. 제목이나 #번호로 하나를 지정해주세요.\n\n- #2 [회의](myorii://memo/2)\n- #3 [회의](myorii://memo/3)"
+  }
+]
