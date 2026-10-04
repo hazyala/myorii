@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from storage import preferences_store, model_store
+from storage import preferences_store, model_store, memo_store
 from ui import preferences
 
 import socket
@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QButtonGroup,
     QSizePolicy,
@@ -250,6 +251,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._page_stack, 1)
 
         self._chat_view = ChatView(self._chat_service)
+        self._chat_view.memo_requested.connect(self._open_memo)
+        self._chat_view.storage_changed.connect(self._refresh_tool_storage)
         self._content_stack.addWidget(self._content_panel("chatPanel"))
         self._content_stack.addWidget(self._content_panel("todoPanel"))
         self._content_stack.addWidget(self._content_panel("memoPanel"))
@@ -328,8 +331,24 @@ class MainWindow(QMainWindow):
             self._page_stack.setCurrentWidget(self._settings_view)
 
     def _select_content_tab(self, index: int) -> None:
+        if self._content_stack.currentIndex() == 2 and index != 2:
+            self._memo_view._editor.save_now()
         self._content_stack.setCurrentIndex(index)
         self._show_main_view()
+
+    def _open_memo(self, memo_id: int) -> None:
+        self._memo_view._editor.save_now()
+        memo = memo_store.get(memo_id)
+        if memo is None:
+            QMessageBox.information(self, "메모", "메모를 찾지 못했습니다. 삭제되었을 수 있습니다.")
+            return
+        self._tabs_group.button(2).setChecked(True)
+        self._select_content_tab(2)
+        self._memo_view.open_editor(memo)
+
+    def _refresh_tool_storage(self) -> None:
+        self._todo_view.refresh_list()
+        self._memo_view.refresh_after_chat_mutation()
 
     def _show_main_view(self) -> None:
         self._page_stack.setCurrentIndex(0)

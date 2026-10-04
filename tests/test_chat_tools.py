@@ -222,7 +222,7 @@ class ChatToolTests(unittest.TestCase):
         memo_store.add('요리', '파스타 레시피')
         service, client = self.service(plan('search', 'memo', query='부산 미팅'), {'ids': [memo.id]}, '오후 3시입니다.')
         answer = ''.join(service.send('/memo 부산 미팅 언제야?'))
-        self.assertIn('참고한 메모: 출장 일정', answer)
+        self.assertIn('참고한 메모: [출장 일정](myorii://memo/', answer)
         self.assertNotIn('파스타', client.requests[-1][1][-1].content)
         self.assertEqual(service.history[-1].metadata['intent'], 'memo_search')
 
@@ -269,7 +269,7 @@ class ChatToolTests(unittest.TestCase):
                 list(service.send('/todo ' + provider + ' 추가해줘'))
                 self.assertIn(provider, ''.join(service.send('/todo 오늘 뭐 해야 하지?')))
                 list(service.send('/memo 부산 회의 3시 추가해줘'))
-                self.assertIn('참고한 메모: 회의', ''.join(service.send('/memo 부산 일정 찾아줘')))
+                self.assertIn('참고한 메모: [회의](myorii://memo/', ''.join(service.send('/memo 부산 일정 찾아줘')))
                 memo_store.delete(('openai', 'gemini', 'anthropic').index(provider) + 1)
             self.assertTrue(all(model == 'selected-model' for model, _ in client.requests))
 

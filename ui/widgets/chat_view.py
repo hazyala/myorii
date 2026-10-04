@@ -635,6 +635,8 @@ class ChatInput(QTextEdit):
 
 
 class ChatView(QWidget):
+    memo_requested = pyqtSignal(int)
+    storage_changed = pyqtSignal()
     def __init__(self, chat_service: ChatService | None = None) -> None:
         super().__init__()
         self.setObjectName("chatView")
@@ -846,6 +848,7 @@ class ChatView(QWidget):
         bubble = MessageBubble(role, text, attachments)
         bubble.update_available_width(self._available_message_width())
         bubble.code_copied.connect(self._show_copy_toast)
+        bubble.memo_requested.connect(self.memo_requested.emit)
         insert_index = max(0, self._message_layout.count() - 1)
         self._message_layout.insertWidget(insert_index, bubble)
         self._register_pointer_autoscroll_widget(bubble)
@@ -873,6 +876,9 @@ class ChatView(QWidget):
             self._assistant_bubble.render_markdown()
             self._register_pointer_autoscroll_widget(self._assistant_bubble)
         self._record_exchange(final_text)
+        if self._chat_service.history and self._chat_service.history[-1].metadata.get("intent") in {
+                "todo_add", "memo_add", "todo_update", "memo_update", "todo_delete", "memo_delete"}:
+            self.storage_changed.emit()
         self._assistant_bubble = None
         self._assistant_has_content = False
         self._set_input_enabled(True)

@@ -25,6 +25,12 @@ def get_all() -> list[Memo]:
     return [_row_to_memo(r) for r in rows]
 
 
+def get(memo_id: int) -> Optional[Memo]:
+    with get_connection() as conn:
+        row = conn.execute("SELECT * FROM memos WHERE id = ?", (memo_id,)).fetchone()
+    return _row_to_memo(row) if row else None
+
+
 def add(title: str = "", body: str = "") -> Memo:
     """맨 끝에 추가"""
     with get_connection() as conn:
@@ -81,6 +87,25 @@ def reorder_many(memo_ids: list[int]) -> None:
 def delete(memo_id: int) -> None:
     with get_connection() as conn:
         conn.execute("DELETE FROM memos WHERE id = ?", (memo_id,))
+
+
+def update_if_unchanged(snapshot: Memo, title: str, body: str) -> Optional[Memo]:
+    with get_connection() as conn:
+        row = conn.execute(
+            """UPDATE memos SET title=?, body=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            WHERE id=? AND title=? AND body=? AND updated_at=? RETURNING *""",
+            (title, body, snapshot.id, snapshot.title, snapshot.body, snapshot.updated_at),
+        ).fetchone()
+    return _row_to_memo(row) if row else None
+
+
+def delete_if_unchanged(snapshot: Memo) -> bool:
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "DELETE FROM memos WHERE id=? AND title=? AND body=? AND updated_at=?",
+            (snapshot.id, snapshot.title, snapshot.body, snapshot.updated_at),
+        )
+        return cursor.rowcount == 1
 
 
 def _row_to_memo(row: object) -> Memo:

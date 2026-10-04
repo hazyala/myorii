@@ -7,6 +7,7 @@ from collections.abc import Callable
 from datetime import date, datetime, timedelta
 
 from core.llm.contracts import ChatMessagePayload
+from core.tools.links import memo_reference
 from storage import memo_store, todo_store
 
 TAG_PATTERN = re.compile(r"(?<!\S)/(todo|memo)(?= )")
@@ -168,8 +169,8 @@ class ChatTools:
             ]).strip()
             if not answer:
                 raise ToolPlanError("메모 답변을 생성하지 못했습니다. 다시 시도해주세요.")
-            titles = list(dict.fromkeys(r["title"] for r in selected))
-            return answer + "\n\n참고한 메모: " + ", ".join(titles), "memo_search"
+            references = [memo_reference(r["id"], r["title"]) for r in selected]
+            return answer + "\n\n참고한 메모: " + ", ".join(references), "memo_search"
         raise ToolPlanError("지원하지 않는 도구 요청입니다. 추가·조회·검색을 요청해주세요.")
 
     @staticmethod

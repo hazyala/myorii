@@ -5,8 +5,8 @@ from ui.preferences import set_local_style, color
 from dataclasses import dataclass
 import re
 
-from PyQt6.QtCore import QSize, QTimer, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QFontMetrics, QIcon, QPainter, QPen, QPixmap, QSyntaxHighlighter, QTextCharFormat
+from PyQt6.QtCore import QSize, QTimer, Qt, QUrl, pyqtSignal
+from PyQt6.QtGui import QColor, QDesktopServices, QFontMetrics, QIcon, QPainter, QPen, QPixmap, QSyntaxHighlighter, QTextCharFormat
 from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
@@ -310,6 +310,7 @@ class UserAttachmentPreview(QFrame):
 
 class MessageBubble(QWidget):
     code_copied = pyqtSignal(str)
+    memo_requested = pyqtSignal(int)
 
     WIDTH_RATIO = 0.94
     ASSISTANT_SIDE_RESERVE = 62
@@ -362,7 +363,7 @@ class MessageBubble(QWidget):
         else:
             self._body = CodeTextBrowser()
             self._body.setFrameShape(QFrame.Shape.NoFrame)
-            self._body.setOpenExternalLinks(True)
+            self._configure_links(self._body)
             self._body.setReadOnly(True)
             self._body.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             self._body.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -622,7 +623,7 @@ class MessageBubble(QWidget):
     def _build_text_block(self, text: str) -> CodeTextBrowser:
         block = CodeTextBrowser()
         block.setFrameShape(QFrame.Shape.NoFrame)
-        block.setOpenExternalLinks(True)
+        self._configure_links(block)
         block.setReadOnly(True)
         block.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         block.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -633,6 +634,22 @@ class MessageBubble(QWidget):
         block.code_copied.connect(self.code_copied.emit)
         self._sync_text_browser_height(block, self._body_width())
         return block
+
+    def _configure_links(self, browser: QTextBrowser) -> None:
+        browser.setOpenLinks(False)
+        browser.setOpenExternalLinks(False)
+        browser.anchorClicked.connect(self._open_link)
+
+    def _open_link(self, url: QUrl) -> None:
+        if url.scheme() == "myorii":
+            if (url.host() == "memo" and re.fullmatch(r"/[1-9]\d*", url.path())
+                    and not url.hasQuery() and not url.hasFragment() and not url.userInfo() and url.port() == -1):
+                memo_id = int(url.path()[1:])
+                if memo_id <= 2**31 - 1:
+                    self.memo_requested.emit(memo_id)
+            return
+        if url.scheme() in {"https", "http", "mailto"}:
+            QDesktopServices.openUrl(url)
 
     def _insert_rendered_widget(self, widget: QWidget) -> None:
         if self._indicator is None:
