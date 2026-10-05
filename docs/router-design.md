@@ -1,5 +1,7 @@
 # Myorii Router Design
 
+> 현재 실행 경로는 [architecture.md](architecture.md)를 기준으로 본다. 이 문서는 단계별 설계 기록도 포함한다. Notion·SyncEngine·MCP는 향후 설계이고, 현재 채팅 도구는 `core/tools/chat_tools.py`의 로컬 할일·메모 처리다. 제공자별 호출은 OllamaClient와 CloudClient로 나뉜다.
+
 Myorii의 라우터는 무거운 에이전트 시스템이 아니라, 사용자의 요청을 가장 빠른 처리 경로로 보내는 얇은 판단 계층이다.
 
 핵심 목표는 아래 다섯 가지다.
