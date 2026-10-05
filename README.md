@@ -77,7 +77,7 @@ PYINSTALLER_CONFIG_DIR=/tmp/myorii_pyinstaller .venv/bin/pyinstaller packaging/m
 open -n dist/Myorii.app
 ```
 
-테스트에는 재현 응답을 사용하는 제공자 검증이 포함된다. 통과 결과가 실제 계정 API 호출이나 패키지 배포 성공을 의미하지는 않는다.
+테스트에는 재현 응답을 사용하는 제공자 검증이 포함된다.
 
 ## 데이터와 현재 범위
 
